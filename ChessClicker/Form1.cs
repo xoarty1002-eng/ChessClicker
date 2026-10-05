@@ -16,6 +16,7 @@ namespace ChessClicker
         private bool _isCalibrating = false;
         private bool _isEngineThinking = false; 
         private bool _isWhiteView = true;
+        private CalibrationMouseHook? _calibrationMouseHook;
 
 
         // Internal instances of system automation layers
@@ -29,10 +30,6 @@ namespace ChessClicker
         {
             InitializeComponent();
 
-            // Allow the form to capture key strokes globally before they focus individual controls
-            this.KeyPreview = true;
-            this.KeyDown += Form1_KeyDown;
-
             // Configure visual asset behaviors natively
             pictureBox1.SizeMode = PictureBoxSizeMode.StretchImage;
 
@@ -41,8 +38,8 @@ namespace ChessClicker
             textBox1.ScrollBars = ScrollBars.Vertical;
 
             // Ensure button text fields look descriptive on startup
-            button2.Text = "Calibrate Layout";
-            button1.Text = "Get Engine Move";
+            button2.Text = "Calibrate";
+            button1.Text = "Play Move";
 
             LoadStartupConfig();
             InitializeGameLoopTimer();
@@ -120,7 +117,7 @@ namespace ChessClicker
                 _isWhiteView = _scaner.DetectPlayerSideFromImage(croppedBoard);
 
                 // 3. Scan for layout modifications and extract binary orientation strings
-                string binaryMoveCandidates = _scaner.ScanForStateChanges(croppedBoard, _isWhiteView);
+                string? binaryMoveCandidates = _scaner.ScanForStateChanges(croppedBoard, _isWhiteView);
 
                 if (!string.IsNullOrEmpty(binaryMoveCandidates))
                 {
@@ -160,77 +157,67 @@ namespace ChessClicker
             }
         }
 
-        // --- BUTTON TRIGGER: INITIALIZE MOUSE HOVER CAPTURING ---
+        // --- BUTTON TRIGGER: CAPTURE BOARD CORNERS FROM DESKTOP CLICKS ---
         private void btnCalibrate_Click(object sender, EventArgs e)
         {
-            _isCalibrating = true;
-            _calibrationStep = 1;
-            _topLeft = Point.Empty;
-            _bottomRight = Point.Empty;
-
-            Log("==================================================");
-            Log("🎯 Mouse Position Tracking Activated!");
-            Log("1. Hover mouse pointer directly over TOP-LEFT corner of the board.");
-            Log("2. Press the [SPACEBAR] key to lock the coordinate index.");
-            Log("==================================================");
+            try
+            {
+                _calibrationStep = 1;
+                _topLeft = Point.Empty;
+                _bottomRight = Point.Empty;
+                _isCalibrating = true;
+                _calibrationMouseHook ??= new CalibrationMouseHook(OnCalibrationClick);
+                _calibrationMouseHook.Start();
+                Log("Click the board's top-left outer corner, then its bottom-right outer corner.");
+                Log("Calibration clicks are intercepted so they do not move a chess piece.");
+            }
+            catch (Exception ex)
+            {
+                _isCalibrating = false;
+                Log($"[Calibration Error] Could not capture mouse clicks: {ex.Message}");
+            }
         }
 
-        // --- GLOBAL KEY LISTENER: LOCK MOUSE POSITION COORDINATES ON SPACEBAR ---
-        private void Form1_KeyDown(object sender, KeyEventArgs e)
+        private void OnCalibrationClick(Point point)
         {
             if (!_isCalibrating) return;
 
-            if (e.KeyCode == Keys.Space)
+            if (_calibrationStep == 1)
             {
-                e.Handled = true;
-                e.SuppressKeyPress = true; // Stop Windows from dinging or clicking background elements
+                _topLeft = point;
+                _calibrationStep = 2;
+                Log($"[Top-left captured] X={point.X}, Y={point.Y}. Click the bottom-right outer corner.");
+                return;
+            }
 
-                Point currentMousePos = Cursor.Position;
+            _bottomRight = point;
+            _isCalibrating = false;
+            _calibrationStep = 0;
+            _calibrationMouseHook?.Stop();
 
-                if (_calibrationStep == 1)
-                {
-                    _topLeft = currentMousePos;
-                    Log($"[Point 1 Locked] Top-Left location saved: X={_topLeft.X}, Y={_topLeft.Y}");
-                    Log("👉 Now move mouse pointer over the BOTTOM-RIGHT corner and hit [SPACEBAR] again.");
-                    _calibrationStep = 2;
-                }
-                else if (_calibrationStep == 2)
-                {
-                    _bottomRight = currentMousePos;
-                    Log($"[Point 2 Locked] Bottom-Right location saved: X={_bottomRight.X}, Y={_bottomRight.Y}");
+            int x = Math.Min(_topLeft.X, _bottomRight.X);
+            int y = Math.Min(_topLeft.Y, _bottomRight.Y);
+            int width = Math.Abs(_topLeft.X - _bottomRight.X);
+            int height = Math.Abs(_topLeft.Y - _bottomRight.Y);
 
-                    _isCalibrating = false;
-                    _calibrationStep = 0;
+            if (width < 30 || height < 30)
+            {
+                Log("[Calibration Aborted] Board area is too small. Start calibration again.");
+                return;
+            }
 
-                    // Math boundary calculations matrix
-                    int x = Math.Min(_topLeft.X, _bottomRight.X);
-                    int y = Math.Min(_topLeft.Y, _bottomRight.Y);
-                    int w = Math.Abs(_topLeft.X - _bottomRight.X);
-                    int h = Math.Abs(_topLeft.Y - _bottomRight.Y);
+            _activeBoardBounds = new Rectangle(x, y, width, height);
+            DisplayCroppedPreview();
 
-                    if (w < 30 || h < 30)
-                    {
-                        Log("[ABORTED] Selected box zone is too small to split. Try tracking again.");
-                        return;
-                    }
-
-                    _activeBoardBounds = new Rectangle(x, y, w, h);
-
-                    // Update PictureBox rendering frame
-                    DisplayCroppedPreview();
-
-                    // Write out clean layout parameters to disk configurations
-                    try
-                    {
-                        string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.txt");
-                        File.WriteAllText(path, $"{x},{y},{w},{h}");
-                        Log($"💾 Layout configurations auto-saved to config.txt -> Dimensions: {w}x{h}px");
-                    }
-                    catch (Exception ex)
-                    {
-                        Log($"[Error] Configuration save failed: {ex.Message}");
-                    }
-                }
+            try
+            {
+                string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.txt");
+                File.WriteAllText(path, $"{x},{y},{width},{height}");
+                Log($"[Calibration Saved] Board bounds: {width}x{height}px.");
+            }
+            catch (Exception ex)
+            {
+                Log($"[Calibration Error] Could not save coordinates: {ex.Message}");
             }
         }
 
@@ -239,7 +226,7 @@ namespace ChessClicker
         {
             if (_activeBoardBounds.Width <= 0 || _activeBoardBounds.Height <= 0)
             {
-                MessageBox.Show("Please complete the mouse-hover calibration sequence first!", "Calibration Required", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("Calibrate the board by clicking its top-left and bottom-right corners first.", "Calibration Required", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
@@ -260,9 +247,12 @@ namespace ChessClicker
         // --- THE FULLY AUTONOMOUS BACKGROUND EVALUATION & CLICK PIPELINE ---
         private async Task AutoRequestEngineMoveAsync()
         {
+            if (_isEngineThinking || _activeBoardBounds.Width <= 0 || _activeBoardBounds.Height <= 0)
+                return;
+
             _isEngineThinking = true;
             Log("==================================================");
-            Log("🤖 Opponent move registered! Processing optimal response strategy...");
+            Log("🤖 Asking Stockfish for a move...");
 
             try
             {
@@ -278,7 +268,9 @@ namespace ChessClicker
 
                 Log($"✨ STOCKFISH RECOMMENDATION: {recommendedMove}");
 
-                if (!string.IsNullOrEmpty(recommendedMove) && recommendedMove != "None" && recommendedMove != "Error starting engine")
+                if (recommendedMove.Length >= 4 && recommendedMove != "None" &&
+                    recommendedMove != "Error starting engine" && recommendedMove != "(none)" &&
+                    recommendedMove != "0000")
                 {
                     Log($"🎯 Executing move click injection sequence: {recommendedMove}");
 
@@ -306,33 +298,40 @@ namespace ChessClicker
                 _isEngineThinking = false;
             }
         }
-        // --- BUTTON TRIGGER: ASYNC STOCKFISH SUGGESTION PROCESSING PIPELINE ---
+        // --- BUTTON TRIGGER: PLAY STOCKFISH'S RECOMMENDED MOVE ---
         private async void btnSuggestMove_ClickAsync(object sender, EventArgs e)
         {
-            if (sender is Button btn)
-                btn.Enabled = false;
-            Log("==================================================");
-            Log("🤖 Sending current matrix parameters to Stockfish engine...");
+            if (_activeBoardBounds.Width <= 0 || _activeBoardBounds.Height <= 0)
+            {
+                MessageBox.Show("Calibrate the board before requesting a move.", "Calibration Required", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            if (sender is Button button)
+                button.Enabled = false;
+
             try
             {
-                // Ensure Stockfish binary deployment paths clear cleanly
-                string engineExePath = await _engine.EnsureEngineInstalledAsync();// Map active perspective turns configuration mapping rules
-                bool isWhiteToMove = _board.Turn == "white";
-                string generatedFenString = _board.GenerateFen();
-                Log($"[FEN Query]: {generatedFenString}");// Offload heavy calculation processes onto a unique background worker thread Task profile
-                string recommendedMove = await Task.Run(() => _engine.GetBestMove(engineExePath, generatedFenString, 1000));
-                Log($"✨ STOCKFISH STRATEGY RECOMMENDATION: {recommendedMove}");
-                Log("==================================================");
+                using Bitmap boardImage = _scaner.CaptureBoardRegion(_activeBoardBounds);
+                _isWhiteView = _scaner.DetectPlayerSideFromImage(boardImage);
+                await AutoRequestEngineMoveAsync();
             }
             catch (Exception ex)
             {
-                Log($"[Engine Execution Failure]: {ex.Message}");
+                Log($"[Engine Execution Failure] {ex.Message}");
             }
             finally
             {
-                if (sender is Button button1)
-                    button1.Enabled = true;
+                if (sender is Button playButton)
+                    playButton.Enabled = true;
             }
+        }
+
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            _calibrationMouseHook?.Dispose();
+            _timerGameLoop?.Stop();
+            base.OnFormClosed(e);
         }
         private void Log(string message)
         {
