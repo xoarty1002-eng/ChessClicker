@@ -1,7 +1,6 @@
 using System;
 using System.Drawing;
 using System.IO;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 using Timer = System.Windows.Forms.Timer;
 
@@ -14,21 +13,18 @@ namespace ChessClicker
         private Point _bottomRight = Point.Empty;
         private int _calibrationStep = 0;
         private bool _isCalibrating = false;
-        private bool _isEngineThinking = false; 
         private bool _isWhiteView = true;
-        private CalibrationMouseHook? _calibrationMouseHook;
+        private DesktopMouseHook? _desktopMouseHook;
 
-
-        // Internal instances of system automation layers
-        private ImageScaner _scaner = new ImageScaner();
-        private ChessBoard _board = new ChessBoard("white");
-        private EngineRun _engine = new EngineRun();
+        private readonly ChessGameController _controller;
         private Timer _timerGameLoop;
-        private DesktopClicker _clicker = new DesktopClicker();
 
         public Form1()
         {
             InitializeComponent();
+            _controller = new ChessGameController();
+            _controller.StatusChanged += Log;
+            _controller.BoardChanged += board => textBox1.Text = board;
 
             // Configure visual asset behaviors natively
             pictureBox1.SizeMode = PictureBoxSizeMode.StretchImage;
@@ -90,7 +86,7 @@ namespace ChessClicker
                 if (_activeBoardBounds.Width <= 0 || _activeBoardBounds.Height <= 0) return;
 
                 // Fetch a quick, clean capture snapshot to render into the UI image box layout context
-                Bitmap cropped = _scaner.CaptureBoardRegion(_activeBoardBounds);
+                Bitmap cropped = _controller.CaptureBoard(_activeBoardBounds);
                 pictureBox1.Image?.Dispose();
                 pictureBox1.Image = cropped;
             }
@@ -101,53 +97,21 @@ namespace ChessClicker
         }
 
         // --- THE 5 FRAMES PER SECOND AUTOMATED STATE SCANNER TICK LOOP ---
-        private void TimerGameLoop_Tick(object sender, EventArgs e)
+        private async void TimerGameLoop_Tick(object sender, EventArgs e)
         {
-            if (_isCalibrating || _isEngineThinking) return;
+            if (_isCalibrating || _controller.IsBusy) return;
 
             try
             {
                 // 1. Capture ONLY the dedicated chessboard screen real estate box parameters
-                using Bitmap croppedBoard = _scaner.CaptureBoardRegion(_activeBoardBounds);
+                using Bitmap croppedBoard = _controller.CaptureBoard(_activeBoardBounds);
 
                 pictureBox1.Image?.Dispose();
                 pictureBox1.Image = (Bitmap)croppedBoard.Clone();
 
                 // 2. Discover perspective view alignments from the screen pixels automatically
-                _isWhiteView = _scaner.DetectPlayerSideFromImage(croppedBoard);
-
-                // 3. Scan for layout modifications and extract binary orientation strings
-                string? binaryMoveCandidates = _scaner.ScanForStateChanges(croppedBoard, _isWhiteView);
-
-                if (!string.IsNullOrEmpty(binaryMoveCandidates))
-                {
-                    // Split apart move combinations (e.g., "e2e4|e4e2")
-                    string[] possibilities = binaryMoveCandidates.Split('|');
-                    if (possibilities.Length != 2)
-                        return;
-
-                    string moveDirectionA = possibilities[0];
-                    string moveDirectionB = possibilities[1];
-
-                    // 4. Test directional movements through our internal matrix validation layer rules
-                    bool moveApplied = false;
-                    if (_board.MakeMove(moveDirectionA))
-                    {
-                        Log($"[State Modified] Automatically processed legal move: {moveDirectionA}");
-                        moveApplied = true;
-                    }
-                    else if (_board.MakeMove(moveDirectionB))
-                    {
-                        Log($"[State Modified] Automatically processed legal move: {moveDirectionB}");
-                        moveApplied = true;
-                    }
-
-                    if (moveApplied)
-                    {
-                        textBox1.Text = _board.GetDebugBoardString();
-                        _ = AutoRequestEngineMoveAsync();
-                    }
-                }
+                _isWhiteView = _controller.DetectWhiteView(croppedBoard);
+                await _controller.ProcessBoardFrameAsync(croppedBoard, _activeBoardBounds, _isWhiteView);
             }
             catch (Exception ex)
             {
@@ -166,8 +130,7 @@ namespace ChessClicker
                 _topLeft = Point.Empty;
                 _bottomRight = Point.Empty;
                 _isCalibrating = true;
-                _calibrationMouseHook ??= new CalibrationMouseHook(OnCalibrationClick);
-                _calibrationMouseHook.Start();
+                EnsureDesktopMouseHook();
                 Log("Click the board's top-left outer corner, then its bottom-right outer corner.");
                 Log("Calibration clicks are intercepted so they do not move a chess piece.");
             }
@@ -178,9 +141,25 @@ namespace ChessClicker
             }
         }
 
+        private bool OnDesktopLeftClick(Point point)
+        {
+            if (_isCalibrating)
+            {
+                OnCalibrationClick(point);
+                return true;
+            }
+
+            if (!_timerGameLoop.Enabled || _controller.IsBusy ||
+                !_activeBoardBounds.Contains(point))
+                return false;
+
+            string square = ScreenPointToSquare(point);
+            _controller.RegisterSquareClick(square, _activeBoardBounds, _isWhiteView);
+            return false;
+        }
+
         private void OnCalibrationClick(Point point)
         {
-            if (!_isCalibrating) return;
 
             if (_calibrationStep == 1)
             {
@@ -193,7 +172,6 @@ namespace ChessClicker
             _bottomRight = point;
             _isCalibrating = false;
             _calibrationStep = 0;
-            _calibrationMouseHook?.Stop();
 
             int x = Math.Min(_topLeft.X, _bottomRight.X);
             int y = Math.Min(_topLeft.Y, _bottomRight.Y);
@@ -221,6 +199,21 @@ namespace ChessClicker
             }
         }
 
+        private void EnsureDesktopMouseHook()
+        {
+            _desktopMouseHook ??= new DesktopMouseHook(OnDesktopLeftClick);
+            _desktopMouseHook.Start();
+        }
+
+        private string ScreenPointToSquare(Point point)
+        {
+            int screenFile = (point.X - _activeBoardBounds.X) * 8 / _activeBoardBounds.Width;
+            int screenRank = (point.Y - _activeBoardBounds.Y) * 8 / _activeBoardBounds.Height;
+            int file = _isWhiteView ? screenFile : 7 - screenFile;
+            int rank = _isWhiteView ? 8 - screenRank : 1 + screenRank;
+            return $"{(char)('a' + file)}{rank}";
+        }
+
         // --- BUTTON TRIGGER: START / PAUSE SCAN TIMER LOOP ---
         private void btnToggleScanner_Click(object sender, EventArgs e)
         {
@@ -238,66 +231,21 @@ namespace ChessClicker
             }
             else
             {
+                try
+                {
+                    EnsureDesktopMouseHook();
+                }
+                catch (Exception ex)
+                {
+                    Log($"[Mouse tracking unavailable] {ex.Message}");
+                }
+
                 _timerGameLoop.Start();
                 ((Button)sender).Text = "Pause Scanner Loop";
-                Log("Live scanning loop active (Speed: 5 FPS). Tracking frame changes...");
+                Log("Live scanning active (5 FPS). Click a piece, then its destination to register a move.");
             }
         }
 
-        // --- THE FULLY AUTONOMOUS BACKGROUND EVALUATION & CLICK PIPELINE ---
-        private async Task AutoRequestEngineMoveAsync()
-        {
-            if (_isEngineThinking || _activeBoardBounds.Width <= 0 || _activeBoardBounds.Height <= 0)
-                return;
-
-            _isEngineThinking = true;
-            Log("==================================================");
-            Log("🤖 Asking Stockfish for a move...");
-
-            try
-            {
-                string engineExePath = await _engine.EnsureEngineInstalledAsync();
-
-                string generatedFenString = _board.GenerateFen();
-                Log($"[FEN Query]: {generatedFenString}");
-
-                // Calculate response via background threads
-                string recommendedMove = await Task.Run(() =>
-                    _engine.GetBestMove(engineExePath, generatedFenString, 1000)
-                );
-
-                Log($"✨ STOCKFISH RECOMMENDATION: {recommendedMove}");
-
-                if (recommendedMove.Length >= 4 && recommendedMove != "None" &&
-                    recommendedMove != "Error starting engine" && recommendedMove != "(none)" &&
-                    recommendedMove != "0000")
-                {
-                    Log($"🎯 Executing move click injection sequence: {recommendedMove}");
-
-                    // 1. INJECT PHYSICAL CLICKS TO SIMULATE MOVE ON DESKTOP
-                    _clicker.ExecuteMoveOnScreen(recommendedMove, _activeBoardBounds, _isWhiteView);
-                    // 2. COMMIT THE SUGGESTED PIECE MOVE INTO INTERNAL BOARD MATRIX MEMORY
-                    if (_board.MakeMove(recommendedMove))
-                    {
-                        Log($"✅ Successfully committed suggested move into internal memory array.");
-
-                        // Force update text layout diagnostics fields
-                        this.Invoke((MethodInvoker)delegate {
-                            textBox1.Text = _board.GetDebugBoardString();
-                        });
-                    }
-                }
-                Log("==================================================");
-            }
-            catch (Exception ex)
-            {
-                Log($"[Automation Pipeline Failure]: {ex.Message}");
-            }
-            finally
-            {
-                _isEngineThinking = false;
-            }
-        }
         // --- BUTTON TRIGGER: PLAY STOCKFISH'S RECOMMENDED MOVE ---
         private async void btnSuggestMove_ClickAsync(object sender, EventArgs e)
         {
@@ -312,9 +260,9 @@ namespace ChessClicker
 
             try
             {
-                using Bitmap boardImage = _scaner.CaptureBoardRegion(_activeBoardBounds);
-                _isWhiteView = _scaner.DetectPlayerSideFromImage(boardImage);
-                await AutoRequestEngineMoveAsync();
+                using Bitmap boardImage = _controller.CaptureBoard(_activeBoardBounds);
+                _isWhiteView = _controller.DetectWhiteView(boardImage);
+                await _controller.RequestEngineMoveAsync(_activeBoardBounds, _isWhiteView);
             }
             catch (Exception ex)
             {
@@ -329,7 +277,7 @@ namespace ChessClicker
 
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
-            _calibrationMouseHook?.Dispose();
+            _desktopMouseHook?.Dispose();
             _timerGameLoop?.Stop();
             base.OnFormClosed(e);
         }
