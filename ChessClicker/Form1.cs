@@ -155,6 +155,7 @@ namespace ChessClicker
         {
             if (_isCalibrating)
             {
+                _calibrationStep += 1;
                 OnCalibrationClick(point);
                 return false;
             }
@@ -177,43 +178,43 @@ namespace ChessClicker
                 _calibrationStep = 2;
                 Log($"[Calibration 1/2] Top-left cursor position: X={point.X}, Y={point.Y}.");
                 Log("Click the board's bottom-right outer corner.");
-                return;
             }
-
-            _bottomRight = point;
-            Log($"[Calibration 2/2] Bottom-right cursor position: X={point.X}, Y={point.Y}.");
-            _isCalibrating = false;
-            _calibrationStep = 0;
-
-            int x = Math.Min(_topLeft.X, _bottomRight.X);
-            int y = Math.Min(_topLeft.Y, _bottomRight.Y);
-            int width = _bottomRight.X - _topLeft.X;
-            int height = _bottomRight.Y - _topLeft.Y;
-
-            if (width <= 0 || height <= 0)
+            else
             {
-                Log($"[Calibration Error] Invalid board dimensions: width={width}px, height={height}px. Click top-left first, then bottom-right.");
-                return;
-            }
+                _bottomRight = point;
+                Log($"[Calibration 2/2] Bottom-right cursor position: X={point.X}, Y={point.Y}.");
+                _isCalibrating = false;
+                _calibrationStep = 0;
+                int x = Math.Min(_topLeft.X, _bottomRight.X);
+                int y = Math.Min(_topLeft.Y, _bottomRight.Y);
+                int width = _bottomRight.X - _topLeft.X;
+                int height = _bottomRight.Y - _topLeft.Y;
 
-            if (width < 30 || height < 30)
-            {
-                Log($"[Calibration Error] Board dimensions are too small: width={width}px, height={height}px. Start calibration again.");
-                return;
-            }
+                if (width <= 0 || height <= 0)
+                {
+                    Log($"[Calibration Error] Invalid board dimensions: width={width}px, height={height}px. Click top-left first, then bottom-right.");
+                    return;
+                }
 
-            _activeBoardBounds = new Rectangle(x, y, width, height);
-            DisplayCroppedPreview();
+                if (width < 30 || height < 30)
+                {
+                    Log($"[Calibration Error] Board dimensions are too small: width={width}px, height={height}px. Start calibration again.");
+                    return;
+                }
 
-            try
-            {
-                string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.txt");
-                File.WriteAllText(path, $"{x},{y},{width},{height}");
-                Log($"[Calibration Saved] Board bounds: X={x}, Y={y}, width={width}px, height={height}px.");
-            }
-            catch (Exception ex)
-            {
-                Log($"[Calibration Error] Could not save coordinates: {ex.Message}");
+                _activeBoardBounds = new Rectangle(x, y, width, height);
+                DisplayCroppedPreview();
+
+                try
+                {
+                    string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.txt");
+                    File.WriteAllText(path, $"{x},{y},{width},{height}");
+                    Log($"[Calibration Saved] Board bounds: X={x}, Y={y}, width={width}px, height={height}px.");
+                }
+                catch (Exception ex)
+                {
+                    Log($"[Calibration Error] Could not save coordinates: {ex.Message}");
+                }
             }
         }
 
@@ -251,6 +252,7 @@ namespace ChessClicker
             {
                 try
                 {
+                    _isCalibrating = true;
                     EnsureDesktopMouseHook();
                 }
                 catch (Exception ex)
