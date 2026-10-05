@@ -83,12 +83,22 @@ namespace ChessClicker
         {
             try
             {
-                if (_activeBoardBounds.Width <= 0 || _activeBoardBounds.Height <= 0) return;
+                if (_activeBoardBounds.Width <= 0 || _activeBoardBounds.Height <= 0)
+                {
+                    Log($"[Preview Error] Invalid board size: {_activeBoardBounds.Width}x{_activeBoardBounds.Height}px.");
+                    return;
+                }
 
-                // Fetch a quick, clean capture snapshot to render into the UI image box layout context
-                Bitmap cropped = _controller.CaptureBoard(_activeBoardBounds);
+                using Bitmap cropped = _controller.CaptureBoard(_activeBoardBounds);
+                if (cropped.Width <= 0 || cropped.Height <= 0)
+                {
+                    Log($"[Preview Error] Captured image has invalid size: {cropped.Width}x{cropped.Height}px.");
+                    return;
+                }
+
                 pictureBox1.Image?.Dispose();
-                pictureBox1.Image = cropped;
+                pictureBox1.Image = (Bitmap)cropped.Clone();
+                Log($"[Preview] Displaying calibrated board: {cropped.Width}x{cropped.Height}px.");
             }
             catch (Exception ex)
             {
@@ -165,22 +175,30 @@ namespace ChessClicker
             {
                 _topLeft = point;
                 _calibrationStep = 2;
-                Log($"[Top-left captured] X={point.X}, Y={point.Y}. Click the bottom-right outer corner.");
+                Log($"[Calibration 1/2] Top-left cursor position: X={point.X}, Y={point.Y}.");
+                Log("Click the board's bottom-right outer corner.");
                 return;
             }
 
             _bottomRight = point;
+            Log($"[Calibration 2/2] Bottom-right cursor position: X={point.X}, Y={point.Y}.");
             _isCalibrating = false;
             _calibrationStep = 0;
 
             int x = Math.Min(_topLeft.X, _bottomRight.X);
             int y = Math.Min(_topLeft.Y, _bottomRight.Y);
-            int width = Math.Abs(_topLeft.X - _bottomRight.X);
-            int height = Math.Abs(_topLeft.Y - _bottomRight.Y);
+            int width = _bottomRight.X - _topLeft.X;
+            int height = _bottomRight.Y - _topLeft.Y;
+
+            if (width <= 0 || height <= 0)
+            {
+                Log($"[Calibration Error] Invalid board dimensions: width={width}px, height={height}px. Click top-left first, then bottom-right.");
+                return;
+            }
 
             if (width < 30 || height < 30)
             {
-                Log("[Calibration Aborted] Board area is too small. Start calibration again.");
+                Log($"[Calibration Error] Board dimensions are too small: width={width}px, height={height}px. Start calibration again.");
                 return;
             }
 
@@ -191,7 +209,7 @@ namespace ChessClicker
             {
                 string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.txt");
                 File.WriteAllText(path, $"{x},{y},{width},{height}");
-                Log($"[Calibration Saved] Board bounds: {width}x{height}px.");
+                Log($"[Calibration Saved] Board bounds: X={x}, Y={y}, width={width}px, height={height}px.");
             }
             catch (Exception ex)
             {
