@@ -4,13 +4,14 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Net.Http;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace ChessClicker
 {
     public class EngineRun
     {
-        private const string EngineDownloadUrl = "https://github.com";
+        private const string EngineReleaseUrl = "https://api.github.com/repos/official-stockfish/Stockfish/releases/latest";
         private const string EngineFolderName = "StockfishEngine";
 
         public async Task<string> EnsureEngineInstalledAsync()
@@ -28,8 +29,25 @@ namespace ChessClicker
 
             using (HttpClient client = new HttpClient())
             {
-                client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
-                byte[] fileBytes = await client.GetByteArrayAsync(EngineDownloadUrl);
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("ChessClicker/1.0");
+                using JsonDocument release = await JsonDocument.ParseAsync(await client.GetStreamAsync(EngineReleaseUrl));
+                JsonElement assets = release.RootElement.GetProperty("assets");
+                JsonElement? asset = assets.EnumerateArray()
+                    .Where(item => item.GetProperty("name").GetString() is string name &&
+                                   name.Contains("windows", StringComparison.OrdinalIgnoreCase) &&
+                                   (name.Contains("x86-64", StringComparison.OrdinalIgnoreCase) ||
+                                    name.Contains("x64", StringComparison.OrdinalIgnoreCase)) &&
+                                   name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(item => item.GetProperty("name").GetString()!.Contains("avx2", StringComparison.OrdinalIgnoreCase))
+                    .Cast<JsonElement?>()
+                    .FirstOrDefault();
+
+                if (asset == null)
+                    throw new FileNotFoundException("No Windows x64 Stockfish archive was found in the latest release.");
+
+                string downloadUrl = asset.Value.GetProperty("browser_download_url").GetString()
+                    ?? throw new InvalidDataException("Stockfish release archive URL is missing.");
+                byte[] fileBytes = await client.GetByteArrayAsync(downloadUrl);
                 await File.WriteAllBytesAsync(zipFilePath, fileBytes);
             }
 

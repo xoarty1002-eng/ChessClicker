@@ -15,6 +15,7 @@ namespace ChessClicker
         private int _calibrationStep = 0;
         private bool _isCalibrating = false;
         private bool _isEngineThinking = false; 
+        private bool _isWhiteView = true;
 
 
         // Internal instances of system automation layers
@@ -105,43 +106,51 @@ namespace ChessClicker
         // --- THE 5 FRAMES PER SECOND AUTOMATED STATE SCANNER TICK LOOP ---
         private void TimerGameLoop_Tick(object sender, EventArgs e)
         {
-            if (_isCalibrating) return;
+            if (_isCalibrating || _isEngineThinking) return;
 
             try
             {
                 // 1. Capture ONLY the dedicated chessboard screen real estate box parameters
-                Bitmap croppedBoard = _scaner.CaptureBoardRegion(_activeBoardBounds);
+                using Bitmap croppedBoard = _scaner.CaptureBoardRegion(_activeBoardBounds);
 
                 pictureBox1.Image?.Dispose();
                 pictureBox1.Image = (Bitmap)croppedBoard.Clone();
 
                 // 2. Discover perspective view alignments from the screen pixels automatically
-                bool sideIsWhite = _scaner.DetectPlayerSideFromImage(croppedBoard);
+                _isWhiteView = _scaner.DetectPlayerSideFromImage(croppedBoard);
 
                 // 3. Scan for layout modifications and extract binary orientation strings
-                string binaryMoveCandidates = _scaner.ScanForStateChanges(croppedBoard, sideIsWhite);
+                string binaryMoveCandidates = _scaner.ScanForStateChanges(croppedBoard, _isWhiteView);
 
                 if (!string.IsNullOrEmpty(binaryMoveCandidates))
                 {
                     // Split apart move combinations (e.g., "e2e4|e4e2")
                     string[] possibilities = binaryMoveCandidates.Split('|');
+                    if (possibilities.Length != 2)
+                        return;
+
                     string moveDirectionA = possibilities[0];
                     string moveDirectionB = possibilities[1];
 
                     // 4. Test directional movements through our internal matrix validation layer rules
+                    bool moveApplied = false;
                     if (_board.MakeMove(moveDirectionA))
                     {
                         Log($"[State Modified] Automatically processed legal move: {moveDirectionA}");
-                        textBox1.Text = _board.GetDebugBoardString();
+                        moveApplied = true;
                     }
                     else if (_board.MakeMove(moveDirectionB))
                     {
                         Log($"[State Modified] Automatically processed legal move: {moveDirectionB}");
+                        moveApplied = true;
+                    }
+
+                    if (moveApplied)
+                    {
                         textBox1.Text = _board.GetDebugBoardString();
+                        _ = AutoRequestEngineMoveAsync();
                     }
                 }
-
-                croppedBoard.Dispose();
             }
             catch (Exception ex)
             {
@@ -274,7 +283,7 @@ namespace ChessClicker
                     Log($"🎯 Executing move click injection sequence: {recommendedMove}");
 
                     // 1. INJECT PHYSICAL CLICKS TO SIMULATE MOVE ON DESKTOP
-                    _clicker.ExecuteMoveOnScreen(recommendedMove, _activeBoardBounds, _board.Side == "white");
+                    _clicker.ExecuteMoveOnScreen(recommendedMove, _activeBoardBounds, _isWhiteView);
                     // 2. COMMIT THE SUGGESTED PIECE MOVE INTO INTERNAL BOARD MATRIX MEMORY
                     if (_board.MakeMove(recommendedMove))
                     {

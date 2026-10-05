@@ -9,7 +9,9 @@ namespace ChessClicker
     public class ImageScaner
     {
         // Stores the previous frame's matrix grid brightness values to compare against
-        private int[,] _previousGridBrightness = null;
+        private int[,]? _previousGridBrightness;
+        private int[,]? _pendingGridBrightness;
+        private int _pendingStableFrames;
 
         /// <summary>
         /// Screens only a specific calibrated part of the desktop monitor directly.
@@ -97,7 +99,7 @@ namespace ChessClicker
         /// Compares the current square brightness states with the previous baseline to track state modifications.
         /// </summary>
         /// <returns>A string representation of the move (e.g. "e2e4") if a state change correlates to a valid chess move; otherwise null.</returns>
-        public string ScanForStateChanges(Bitmap currentBoard, bool isWhiteView)
+        public string? ScanForStateChanges(Bitmap currentBoard, bool isWhiteView)
         {
             if (currentBoard == null) return null;
 
@@ -128,28 +130,62 @@ namespace ChessClicker
                 }
             }
 
-            // A standard single piece move updates exactly 2 squares (the starting square and ending square)
+            if (changedSquares.Count == 0)
+            {
+                _pendingGridBrightness = null;
+                _pendingStableFrames = 0;
+                return null;
+            }
+
+            if (GridsAreStable(currentBrightness, _pendingGridBrightness))
+            {
+                _pendingStableFrames++;
+            }
+            else
+            {
+                _pendingGridBrightness = currentBrightness;
+                _pendingStableFrames = 1;
+            }
+
+            if (_pendingStableFrames < 2)
+                return null;
+
+            // A stable move changes its source and destination squares.
             if (changedSquares.Count == 2)
             {
                 string candidate1 = $"{changedSquares[0]}{changedSquares[1]}";
                 string candidate2 = $"{changedSquares[1]}{changedSquares[0]}";
-
-                // Save baseline for the next processing cycle loop configuration
                 _previousGridBrightness = currentBrightness;
-
-                // Return both orientations combined in an execution signature array wrapper string 
-                // formatted as candidate1, handled dynamically inside your Form logic
+                _pendingGridBrightness = null;
+                _pendingStableFrames = 0;
                 return $"{candidate1}|{candidate2}";
             }
 
-            // If more than 2 squares changed (e.g. dragging mouse cursor, animations, or castling),
-            // update baseline tracking to stay calibrated but bypass processing this tick frame.
-            if (changedSquares.Count > 0)
+            // Persistent highlights or multi-square changes are not a normal move.
+            if (_pendingStableFrames >= 4)
             {
                 _previousGridBrightness = currentBrightness;
+                _pendingGridBrightness = null;
+                _pendingStableFrames = 0;
             }
 
             return null;
+        }
+
+        private static bool GridsAreStable(int[,] current, int[,]? previous)
+        {
+            if (previous == null) return false;
+
+            for (int rank = 0; rank < 8; rank++)
+            {
+                for (int file = 0; file < 8; file++)
+                {
+                    if (Math.Abs(current[rank, file] - previous[rank, file]) > 8)
+                        return false;
+                }
+            }
+
+            return true;
         }
 
         private string ConvertGridToAlgebraic(int file, int rank, bool isWhiteView)
