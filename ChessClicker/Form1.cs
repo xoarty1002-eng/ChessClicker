@@ -142,7 +142,7 @@ namespace ChessClicker
                 _isCalibrating = true;
                 EnsureDesktopMouseHook();
                 Log("Click the board's top-left outer corner, then its bottom-right outer corner.");
-                Log("Calibration clicks are intercepted so they do not move a chess piece.");
+                Log("Calibration clicks are forwarded to the board.");
             }
             catch (Exception ex)
             {
@@ -156,7 +156,7 @@ namespace ChessClicker
             if (_isCalibrating)
             {
                 OnCalibrationClick(point);
-                return true;
+                return false;
             }
 
             if (!_timerGameLoop.Enabled || _controller.IsBusy ||
