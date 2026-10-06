@@ -11,11 +11,16 @@ namespace ChessClicker
         private readonly NumericUpDown _framesPerSecondInput;
         private readonly NumericUpDown _brightnessThresholdInput;
         private readonly NumericUpDown _previewSmoothingInput;
+        private readonly NumericUpDown _stableBoardDurationInput;
+        private readonly NumericUpDown _pieceSignatureSeparationInput;
         private readonly ComboBox _boardThemeInput;
+        private readonly ComboBox _playModeInput;
+        private readonly ComboBox _engineSideInput;
         private readonly CheckBox _randomSkillInput;
         private readonly CheckBox _calibrateWhilePlayingInput;
         private readonly NumericUpDown _randomSkillIntervalInput;
         private readonly TextBox _startingPositionFenInput;
+        private readonly TextBox _enginePathInput;
 
         public ChessClickerSettings Settings => new(
             (int)_moveTimeInput.Value,
@@ -27,7 +32,12 @@ namespace ChessClicker
             (int)_randomSkillIntervalInput.Value,
             _calibrateWhilePlayingInput.Checked,
             (int)_previewSmoothingInput.Value,
-            _startingPositionFenInput.Text);
+            _startingPositionFenInput.Text,
+            _enginePathInput.Text,
+            (string)_playModeInput.SelectedItem!,
+            (string)_engineSideInput.SelectedItem!,
+            (int)_stableBoardDurationInput.Value,
+            (int)_pieceSignatureSeparationInput.Value);
 
         public SettingsForm(ChessClickerSettings settings)
         {
@@ -39,21 +49,21 @@ namespace ChessClicker
             MaximizeBox = false;
             MinimizeBox = false;
             ShowInTaskbar = false;
-            ClientSize = new Size(500, 520);
+            ClientSize = new Size(560, 740);
 
             var layout = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 2,
-                RowCount = 11,
+                RowCount = 16,
                 Padding = new Padding(12)
             };
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 62));
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38));
-            for (int row = 0; row < 8; row++)
+            for (int row = 0; row < 13; row++)
                 layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
-            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
 
             _moveTimeInput = CreateNumber(settings.MoveTimeMilliseconds, 100, 10000, 100);
@@ -61,6 +71,9 @@ namespace ChessClicker
             _framesPerSecondInput = CreateNumber(settings.FramesPerSecond, 1, 30);
             _brightnessThresholdInput = CreateNumber(settings.BrightnessThreshold, 1, 100);
             _previewSmoothingInput = CreateNumber(settings.PreviewSmoothingPercent, 0, 100, 5);
+            _stableBoardDurationInput = CreateNumber(settings.StableBoardDurationMilliseconds, 500, 10000, 100);
+            _pieceSignatureSeparationInput =
+                CreateNumber(settings.MinimumPieceSignatureSeparationPercent, 1, 100);
             _boardThemeInput = new ComboBox
             {
                 Dock = DockStyle.Fill,
@@ -68,6 +81,8 @@ namespace ChessClicker
             };
             _boardThemeInput.Items.AddRange(["Green", "Brown", "Blue", "Gray"]);
             _boardThemeInput.SelectedItem = settings.BoardTheme;
+            _playModeInput = CreateComboBox(["Solo", "Duo"], settings.PlayMode);
+            _engineSideInput = CreateComboBox(["Top", "Bottom"], settings.EngineSide);
             _randomSkillInput = new CheckBox
             {
                 Text = "Random level every N turns",
@@ -81,7 +96,7 @@ namespace ChessClicker
             _randomSkillIntervalInput.Enabled = _randomSkillInput.Checked;
 
             AddSetting(layout, "Thinking time per move (ms)", _moveTimeInput, 0);
-            AddSetting(layout, "Stockfish skill (0-20)", _skillLevelInput, 1);
+            AddSetting(layout, "Engine skill (Stockfish, 0-20)", _skillLevelInput, 1);
             AddSetting(layout, "Live preview / scan FPS", _framesPerSecondInput, 2);
             AddSetting(layout, "Square brightness sensitivity", _brightnessThresholdInput, 3);
             AddSetting(layout, "Board theme", _boardThemeInput, 4);
@@ -97,6 +112,27 @@ namespace ChessClicker
             layout.Controls.Add(_calibrateWhilePlayingInput, 0, 6);
             layout.SetColumnSpan(_calibrateWhilePlayingInput, 2);
             AddSetting(layout, "Preview smoothing (0–100%)", _previewSmoothingInput, 7);
+            AddSetting(layout, "Board stable before click (ms)", _stableBoardDurationInput, 8);
+            AddSetting(layout, "Play mode (Solo/Duo)", _playModeInput, 9);
+            AddSetting(layout, "Engine side in Solo mode", _engineSideInput, 10);
+            _enginePathInput = new TextBox
+            {
+                Text = settings.EnginePath,
+                Dock = DockStyle.Fill
+            };
+            var enginePathPanel = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 1
+            };
+            enginePathPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            enginePathPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 72));
+            var browseEngineButton = new Button { Text = "Browse...", Dock = DockStyle.Fill };
+            browseEngineButton.Click += BrowseEngineButton_Click;
+            enginePathPanel.Controls.Add(_enginePathInput, 0, 0);
+            enginePathPanel.Controls.Add(browseEngineButton, 1, 0);
+            AddSetting(layout, "UCI engine executable (blank = auto Stockfish)", enginePathPanel, 11);
             _startingPositionFenInput = new TextBox
             {
                 Text = settings.StartingPositionFen,
@@ -105,7 +141,8 @@ namespace ChessClicker
                 WordWrap = false,
                 ScrollBars = ScrollBars.Horizontal
             };
-            AddSetting(layout, "Starting position FEN", _startingPositionFenInput, 8);
+            AddSetting(layout, "Starting position FEN", _startingPositionFenInput, 12);
+            AddSetting(layout, "Minimum figure signature separation (%)", _pieceSignatureSeparationInput, 13);
 
             var note = new Label
             {
@@ -113,7 +150,7 @@ namespace ChessClicker
                 AutoSize = true,
                 Dock = DockStyle.Fill
             };
-            layout.Controls.Add(note, 0, 9);
+            layout.Controls.Add(note, 0, 14);
             layout.SetColumnSpan(note, 2);
 
             var buttons = new FlowLayoutPanel
@@ -125,7 +162,7 @@ namespace ChessClicker
             var cancelButton = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
             buttons.Controls.Add(saveButton);
             buttons.Controls.Add(cancelButton);
-            layout.Controls.Add(buttons, 0, 10);
+            layout.Controls.Add(buttons, 0, 15);
             layout.SetColumnSpan(buttons, 2);
 
             Controls.Add(layout);
@@ -142,6 +179,30 @@ namespace ChessClicker
                 Value = value,
                 Dock = DockStyle.Fill
             };
+
+        private static ComboBox CreateComboBox(string[] values, string selectedValue)
+        {
+            var comboBox = new ComboBox
+            {
+                Dock = DockStyle.Fill,
+                DropDownStyle = ComboBoxStyle.DropDownList
+            };
+            comboBox.Items.AddRange(values);
+            comboBox.SelectedItem = selectedValue;
+            return comboBox;
+        }
+
+        private void BrowseEngineButton_Click(object? sender, EventArgs e)
+        {
+            using var dialog = new OpenFileDialog
+            {
+                Title = "Select a UCI chess engine",
+                Filter = "Executable files (*.exe)|*.exe|All files (*.*)|*.*",
+                CheckFileExists = true
+            };
+            if (dialog.ShowDialog(this) == DialogResult.OK)
+                _enginePathInput.Text = dialog.FileName;
+        }
 
         private static void AddSetting(TableLayoutPanel layout, string label, Control input, int row)
         {

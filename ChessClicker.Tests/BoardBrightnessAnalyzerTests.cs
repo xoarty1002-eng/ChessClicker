@@ -101,6 +101,58 @@ public sealed class BoardBrightnessAnalyzerTests
         Assert.Equal("d7d5", move);
     }
 
+    [Fact]
+    public void SelectsOnlyLegalWhiteMoveAmongTheChangedScreenSquares()
+    {
+        var board = new ChessBoard(ChessBoard.StandardStartingFen);
+        IReadOnlyList<(int Rank, int File)> changedSquares = [(6, 4), (4, 4)];
+        string[] candidates = BoardMoveDetector.CreateCandidates(changedSquares, isWhiteView: true)
+            .Split('|');
+
+        string? move = BoardMoveDetector.FindUniqueLegalMove(candidates, candidate =>
+            board.ValidateMove(
+                8 - (candidate[1] - '0'), candidate[0] - 'a',
+                8 - (candidate[3] - '0'), candidate[2] - 'a'));
+
+        Assert.Equal("e2e4", move);
+    }
+
+    [Theory]
+    [InlineData(true, "e1g1", 7, 4, 7, 6, 7, 7, 7, 5)]
+    [InlineData(true, "e1c1", 7, 4, 7, 2, 7, 0, 7, 3)]
+    [InlineData(false, "e8g8", 7, 3, 7, 1, 7, 0, 7, 2)]
+    [InlineData(false, "e8c8", 7, 3, 7, 5, 7, 7, 7, 4)]
+    public void DetectsCastlingAsOneCompoundMove(
+        bool isWhiteView,
+        string expectedMove,
+        int firstRank,
+        int firstFile,
+        int secondRank,
+        int secondFile,
+        int thirdRank,
+        int thirdFile,
+        int fourthRank,
+        int fourthFile)
+    {
+        IReadOnlyList<(int Rank, int File)> changedSquares =
+        [
+            (firstRank, firstFile),
+            (secondRank, secondFile),
+            (thirdRank, thirdFile),
+            (fourthRank, fourthFile)
+        ];
+
+        string[] candidates = BoardMoveDetector.CreateCandidates(changedSquares, isWhiteView).Split('|');
+        var board = new ChessBoard(
+            $"r3k2r/8/8/8/8/8/8/R3K2R {(expectedMove[1] == '1' ? "w" : "b")} KQkq - 0 1");
+        string? detectedMove = BoardMoveDetector.FindUniqueLegalMove(candidates, candidate =>
+            board.ValidateMove(
+                8 - (candidate[1] - '0'), candidate[0] - 'a',
+                8 - (candidate[3] - '0'), candidate[2] - 'a'));
+
+        Assert.Equal(expectedMove, detectedMove);
+    }
+
     private static int[,] FilledGrid(int value)
     {
         int[,] grid = new int[8, 8];

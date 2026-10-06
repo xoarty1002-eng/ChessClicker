@@ -35,6 +35,11 @@ public sealed class ChessClickerSettingsTests
         Assert.False(ChessClickerSettings.Default.CalibrateWhilePlaying);
         Assert.Equal(50, ChessClickerSettings.Default.PreviewSmoothingPercent);
         Assert.Equal(ChessBoard.StandardStartingFen, ChessClickerSettings.Default.StartingPositionFen);
+        Assert.Equal("", ChessClickerSettings.Default.EnginePath);
+        Assert.Equal("Solo", ChessClickerSettings.Default.PlayMode);
+        Assert.Equal("Bottom", ChessClickerSettings.Default.EngineSide);
+        Assert.Equal(500, ChessClickerSettings.Default.StableBoardDurationMilliseconds);
+        Assert.Equal(8, ChessClickerSettings.Default.MinimumPieceSignatureSeparationPercent);
     }
 
     [Theory]
@@ -73,7 +78,9 @@ public sealed class ChessClickerSettingsTests
     {
         string path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "settings.json");
         const string midgameFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1";
-        var expected = new ChessClickerSettings(1500, 14, 12, 22, "Blue", true, 3, true, 75, midgameFen);
+        var expected = new ChessClickerSettings(
+            1500, 14, 12, 22, "Blue", true, 3, true, 75, midgameFen,
+            "/engines/example-engine", "Duo", "Top", 1200, 17);
 
         try
         {
@@ -90,6 +97,11 @@ public sealed class ChessClickerSettingsTests
             Assert.Equal(expected.CalibrateWhilePlaying, actual.CalibrateWhilePlaying);
             Assert.Equal(expected.PreviewSmoothingPercent, actual.PreviewSmoothingPercent);
             Assert.Equal(expected.StartingPositionFen, actual.StartingPositionFen);
+            Assert.Equal(expected.EnginePath, actual.EnginePath);
+            Assert.Equal(expected.PlayMode, actual.PlayMode);
+            Assert.Equal(expected.EngineSide, actual.EngineSide);
+            Assert.Equal(expected.StableBoardDurationMilliseconds, actual.StableBoardDurationMilliseconds);
+            Assert.Equal(expected.MinimumPieceSignatureSeparationPercent, actual.MinimumPieceSignatureSeparationPercent);
         }
         finally
         {
@@ -114,6 +126,10 @@ public sealed class ChessClickerSettingsTests
 
             Assert.Equal(50, loaded.PreviewSmoothingPercent);
             Assert.False(loaded.CalibrateWhilePlaying);
+            Assert.Equal("Solo", loaded.PlayMode);
+            Assert.Equal("Bottom", loaded.EngineSide);
+            Assert.Equal(500, loaded.StableBoardDurationMilliseconds);
+            Assert.Equal(8, loaded.MinimumPieceSignatureSeparationPercent);
         }
         finally
         {
@@ -121,5 +137,27 @@ public sealed class ChessClickerSettingsTests
             if (directory != null && Directory.Exists(directory))
                 Directory.Delete(directory, recursive: true);
         }
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(101)]
+    public void RejectsUnsupportedPieceSignatureSeparation(int separationPercent)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new ChessClickerSettings(
+            1000, 20, minimumPieceSignatureSeparationPercent: separationPercent));
+    }
+
+    [Theory]
+    [InlineData("Invalid", "Bottom", 500)]
+    [InlineData("Solo", "Left", 500)]
+    [InlineData("Solo", "Bottom", -1)]
+    [InlineData("Solo", "Bottom", 499)]
+    [InlineData("Duo", "Top", 10001)]
+    public void RejectsInvalidGameAndStabilitySettings(string mode, string side, int stableMilliseconds)
+    {
+        Assert.ThrowsAny<ArgumentException>(() => new ChessClickerSettings(
+            1000, 20, playMode: mode, engineSide: side,
+            stableBoardDurationMilliseconds: stableMilliseconds));
     }
 }

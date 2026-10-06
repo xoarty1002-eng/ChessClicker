@@ -6,21 +6,31 @@ namespace ChessClicker
     {
         private readonly int _requiredStableFrames;
         private readonly int _brightnessTolerance;
+        private readonly TimeSpan _requiredStableDuration;
         private int[,]? _referenceFrame;
         private int _stableFrameCount;
+        private DateTimeOffset? _stableSince;
 
-        public BoardStabilityTracker(int requiredStableFrames = 3, int brightnessTolerance = 4)
+        public BoardStabilityTracker(
+            int requiredStableFrames = 3,
+            int brightnessTolerance = 4,
+            TimeSpan? requiredStableDuration = null)
         {
             if (requiredStableFrames < 2)
                 throw new ArgumentOutOfRangeException(nameof(requiredStableFrames));
             if (brightnessTolerance < 0)
                 throw new ArgumentOutOfRangeException(nameof(brightnessTolerance));
+            if (requiredStableDuration < TimeSpan.Zero)
+                throw new ArgumentOutOfRangeException(nameof(requiredStableDuration));
 
             _requiredStableFrames = requiredStableFrames;
             _brightnessTolerance = brightnessTolerance;
+            _requiredStableDuration = requiredStableDuration ?? TimeSpan.Zero;
         }
 
-        public bool AddFrame(int[,] frame)
+        public bool AddFrame(int[,] frame) => AddFrame(frame, DateTimeOffset.UtcNow);
+
+        public bool AddFrame(int[,] frame, DateTimeOffset timestamp)
         {
             ArgumentNullException.ThrowIfNull(frame);
             if (frame.GetLength(0) != 8 || frame.GetLength(1) != 8)
@@ -30,17 +40,20 @@ namespace ChessClicker
             {
                 _referenceFrame = CopyFrame(frame);
                 _stableFrameCount = 1;
+                _stableSince = timestamp;
                 return false;
             }
 
             _stableFrameCount++;
-            return _stableFrameCount >= _requiredStableFrames;
+            return _stableFrameCount >= _requiredStableFrames &&
+                   timestamp - _stableSince >= _requiredStableDuration;
         }
 
         public void Reset()
         {
             _referenceFrame = null;
             _stableFrameCount = 0;
+            _stableSince = null;
         }
 
         private bool FramesAreClose(int[,] first, int[,] second)

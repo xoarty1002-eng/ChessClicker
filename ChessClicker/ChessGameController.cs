@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace ChessClicker
@@ -11,6 +12,8 @@ namespace ChessClicker
         private readonly EngineRun _engine = new EngineRun();
         private readonly DesktopClicker _clicker = new DesktopClicker();
         private readonly MoveConfirmation _moveConfirmation = new();
+        private CancellationTokenSource _automationCancellation = new();
+        private bool _automationActive;
         private string? _pendingFromSquare;
         private bool? _lastDetectedWhiteView;
         private ChessClickerSettings _settings = ChessClickerSettings.Default;
@@ -24,6 +27,22 @@ namespace ChessClicker
         public event Action<string>? BoardChanged;
 
         public bool IsBusy { get; private set; }
+
+        public void StartAutomation()
+        {
+            if (_automationCancellation.IsCancellationRequested)
+            {
+                _automationCancellation.Dispose();
+                _automationCancellation = new CancellationTokenSource();
+            }
+            _automationActive = true;
+        }
+
+        public void StopAutomation()
+        {
+            _automationActive = false;
+            _automationCancellation.Cancel();
+        }
 
         public void UpdateSettings(ChessClickerSettings settings)
         {
@@ -70,8 +89,10 @@ namespace ChessClicker
             if (IsBusy) return;
 
             IsBusy = true;
+            CancellationToken cancellationToken = _automationCancellation.Token;
             try
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 string? candidates = _scanner.ScanForStateChanges(
                     boardImage, isWhiteView, _settings.BrightnessThreshold);
                 if (string.IsNullOrEmpty(candidates)) return;
@@ -102,7 +123,12 @@ namespace ChessClicker
 
                 NotifyBoardChanged();
                 StatusChanged?.Invoke($"[State Modified] Processed legal move: {appliedMove}");
-                await RequestEngineMoveCoreAsync(bounds, isWhiteView);
+                if (ShouldEngineMove(isWhiteView))
+                    await RequestEngineMoveCoreAsync(bounds, isWhiteView, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                StatusChanged?.Invoke("[Play] Automation stopped.");
             }
             catch (Exception ex)
             {
@@ -146,13 +172,36 @@ namespace ChessClicker
             }
 
             IsBusy = true;
+            CancellationToken cancellationToken = _automationCancellation.Token;
             try
             {
-                await RequestEngineMoveCoreAsync(bounds, isWhiteView);
+                cancellationToken.ThrowIfCancellationRequested();
+                if (ShouldEngineMove(isWhiteView))
+                    await RequestEngineMoveCoreAsync(bounds, isWhiteView, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                StatusChanged?.Invoke("[Play] Automation stopped.");
             }
             catch (Exception ex)
             {
                 StatusChanged?.Invoke($"[Engine Execution Failure] {ex.Message}");
+            }
+            finally
+            {
+                IsBusy = false;
+            }
+        }
+
+        public async Task<string?> GetEngineSuggestionAsync()
+        {
+            if (IsBusy)
+                throw new InvalidOperationException("Wait for the current operation before requesting a suggestion.");
+
+            IsBusy = true;
+            try
+            {
+                return await GetEngineMoveSuggestionAsync(CancellationToken.None);
             }
             finally
             {
@@ -174,7 +223,12 @@ namespace ChessClicker
             IsBusy = true;
             try
             {
-                await SendMoveAndWaitForConfirmationAsync(move, bounds, isWhiteView);
+                await SendMoveAndWaitForConfirmationAsync(
+                    move,
+                    bounds,
+                    isWhiteView,
+                    _automationActive ? _automationCancellation.Token : CancellationToken.None,
+                    continueGame: _automationActive);
             }
             finally
             {
@@ -185,9 +239,10 @@ namespace ChessClicker
         private async Task ProcessClickedMoveAsync(string move, Rectangle bounds, bool isWhiteView)
         {
             IsBusy = true;
+            CancellationToken cancellationToken = _automationCancellation.Token;
             try
             {
-                await Task.Delay(350);
+                await Task.Delay(350, cancellationToken);
                 if (!_board.MakeMove(move))
                 {
                     StatusChanged?.Invoke($"[Mouse move rejected] {move} no longer matches the tracked position.");
@@ -196,7 +251,12 @@ namespace ChessClicker
 
                 NotifyBoardChanged();
                 StatusChanged?.Invoke($"[Mouse move detected] {move}");
-                await RequestEngineMoveCoreAsync(bounds, isWhiteView);
+                if (ShouldEngineMove(isWhiteView))
+                    await RequestEngineMoveCoreAsync(bounds, isWhiteView, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                StatusChanged?.Invoke("[Play] Automation stopped.");
             }
             catch (Exception ex)
             {
@@ -208,7 +268,10 @@ namespace ChessClicker
             }
         }
 
-        private async Task RequestEngineMoveCoreAsync(Rectangle bounds, bool isWhiteView)
+        private async Task RequestEngineMoveCoreAsync(
+            Rectangle bounds,
+            bool isWhiteView,
+            CancellationToken cancellationToken)
         {
             if (_moveConfirmation.PendingMove != null)
             {
@@ -217,31 +280,73 @@ namespace ChessClicker
                 return;
             }
 
-            int skillLevel = GetSkillLevelForNextTurn();
-            StatusChanged?.Invoke($"[Stockfish] Calculating a move at skill level {skillLevel}/20...");
+            string? move = await GetEngineMoveSuggestionAsync(cancellationToken);
+            if (move == null)
+                return;
 
-            string enginePath = await _engine.EnsureEngineInstalledAsync();
+            await SendMoveAndWaitForConfirmationAsync(
+                move, bounds, isWhiteView, cancellationToken, continueGame: true);
+        }
+
+        private async Task<string?> GetEngineMoveSuggestionAsync(CancellationToken cancellationToken)
+        {
+            int skillLevel = GetSkillLevelForNextTurn();
+            if (_board.Checkmate || !_board.HasLegalMoveForTurn())
+            {
+                StatusChanged?.Invoke(_board.Checkmate
+                    ? "[Game over] Checkmate."
+                    : "[Game over] The side to move has no legal moves (stalemate).");
+                return null;
+            }
+
+            StatusChanged?.Invoke($"[Engine] Calculating a move at skill level {skillLevel}/20...");
+            string enginePath = await _engine.EnsureEngineInstalledAsync(_settings.EnginePath);
             string fen = _board.GenerateFen();
             StatusChanged?.Invoke($"[FEN Query] {fen}");
 
-            string move = await Task.Run(() =>
-                _engine.GetBestMove(enginePath, fen, _settings.MoveTimeMilliseconds, skillLevel));
-            StatusChanged?.Invoke($"[Stockfish Recommendation] {move}");
+            string move = await _engine.GetBestMoveAsync(
+                enginePath, fen, _settings.MoveTimeMilliseconds, skillLevel, cancellationToken);
+            if (move is "None" or "Error starting engine" or "(none)" or "0000")
+            {
+                StatusChanged?.Invoke("[Engine] No move is available for this position.");
+                return null;
+            }
 
-            if (move.Length < 4 || move == "None" || move == "Error starting engine" ||
-                move == "(none)" || move == "0000")
-                return;
+            try
+            {
+                move = ChessMoveNotation.Normalize(move);
+            }
+            catch (ArgumentException ex)
+            {
+                StatusChanged?.Invoke($"[Engine error] The configured engine returned invalid move notation: {ex.Message}");
+                return null;
+            }
 
-            await SendMoveAndWaitForConfirmationAsync(move, bounds, isWhiteView);
+            if (!_board.ValidateMove(
+                    8 - (move[1] - '0'), move[0] - 'a',
+                    8 - (move[3] - '0'), move[2] - 'a'))
+            {
+                StatusChanged?.Invoke($"[Engine error] The configured engine returned an illegal move: {move}.");
+                return null;
+            }
+
+            StatusChanged?.Invoke($"[Engine suggestion] {move} (not clicked).");
+            return move;
         }
 
-        private async Task SendMoveAndWaitForConfirmationAsync(string move, Rectangle bounds, bool isWhiteView)
+        private async Task SendMoveAndWaitForConfirmationAsync(
+            string move,
+            Rectangle bounds,
+            bool isWhiteView,
+            CancellationToken cancellationToken,
+            bool continueGame)
         {
-            StatusChanged?.Invoke("[Board verification] Waiting for three stable captures before sending the move...");
-            if (!await WaitForStableBoardAsync(bounds))
+            StatusChanged?.Invoke(
+                $"[Board verification] Waiting for the board to stay stable for at least {_settings.StableBoardDurationMilliseconds} ms...");
+            if (!await WaitForStableBoardAsync(bounds, cancellationToken))
             {
                 StatusChanged?.Invoke(
-                    $"[Move blocked] The board did not remain stable for three captures within {BoardStabilityTimeout.TotalSeconds:0} seconds. No move was sent.");
+                    $"[Move blocked] The board did not stay stable for the configured duration within {BoardStabilityTimeout.TotalSeconds + _settings.StableBoardDurationMilliseconds / 1000.0:0.#} seconds. No move was sent.");
                 return;
             }
 
@@ -254,7 +359,7 @@ namespace ChessClicker
             DateTime confirmationDeadline = DateTime.UtcNow + MoveConfirmationTimeout;
             while (DateTime.UtcNow < confirmationDeadline)
             {
-                await Task.Delay(MoveConfirmationPollInterval);
+                await Task.Delay(MoveConfirmationPollInterval, cancellationToken);
                 using Bitmap currentBoard = CaptureBoard(bounds);
                 string? candidates = _scanner.ScanForStateChanges(
                     currentBoard, isWhiteView, _settings.BrightnessThreshold);
@@ -265,6 +370,8 @@ namespace ChessClicker
                 {
                     NotifyBoardChanged();
                     StatusChanged?.Invoke($"[Move confirmed] {move} was detected on the board.");
+                    if (continueGame && ShouldEngineMove(isWhiteView))
+                        await RequestEngineMoveCoreAsync(bounds, isWhiteView, cancellationToken);
                     return;
                 }
 
@@ -277,19 +384,26 @@ namespace ChessClicker
                 $"[Move not confirmed] {move} was sent, but no matching board change appeared within {MoveConfirmationTimeout.TotalSeconds:0} seconds. The tracked position was not advanced; scanning remains armed to detect a delayed board update.");
         }
 
-        private async Task<bool> WaitForStableBoardAsync(Rectangle bounds)
+        private async Task<bool> WaitForStableBoardAsync(Rectangle bounds, CancellationToken cancellationToken)
         {
-            var stabilityTracker = new BoardStabilityTracker(requiredStableFrames: 3);
-            DateTime deadline = DateTime.UtcNow + BoardStabilityTimeout;
+            TimeSpan stabilityTimeout = BoardStabilityTimeout +
+                TimeSpan.FromMilliseconds(_settings.StableBoardDurationMilliseconds);
+            var stabilityTracker = new BoardStabilityTracker(
+                requiredStableFrames: 2,
+                requiredStableDuration: TimeSpan.FromMilliseconds(_settings.StableBoardDurationMilliseconds));
+            DateTime deadline = DateTime.UtcNow + stabilityTimeout;
             int intervalMilliseconds = Math.Max(1, 1000 / _settings.FramesPerSecond);
 
             while (DateTime.UtcNow < deadline)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 using Bitmap currentBoard = CaptureBoard(bounds);
-                if (stabilityTracker.AddFrame(_scanner.ExtractGridBrightness(currentBoard)))
+                if (stabilityTracker.AddFrame(
+                        _scanner.ExtractGridBrightness(currentBoard),
+                        DateTimeOffset.UtcNow))
                     return true;
 
-                await Task.Delay(intervalMilliseconds);
+                await Task.Delay(intervalMilliseconds, cancellationToken);
             }
 
             return false;
@@ -306,6 +420,10 @@ namespace ChessClicker
 
             return _settings.StockfishSkillLevel;
         }
+
+        private bool ShouldEngineMove(bool isWhiteView)
+            => ChessSideSelection.ShouldEngineMove(
+                _settings.PlayMode, _settings.EngineSide, isWhiteView, _board.Turn);
 
         private bool ConfirmEngineMove(string candidates)
         {
@@ -355,8 +473,9 @@ namespace ChessClicker
         {
             if (move.Length < 4 ||
                 move[0] is < 'a' or > 'h' ||
-                move[2] is < 'a' or > 'h' ||
                 move[1] is < '1' or > '8' ||
+                move[2] is < 'a' or > 'h' ||
+                move[3] is < '1' or > '8' ||
                 move[3] is < '1' or > '8')
                 return false;
 

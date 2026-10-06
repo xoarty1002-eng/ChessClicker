@@ -41,6 +41,35 @@ public sealed class BoardStabilityTrackerTests
     }
 
     [Fact]
+    public void RequiresConfiguredElapsedStableDurationEvenWhenFramesAreStable()
+    {
+        var tracker = new BoardStabilityTracker(
+            requiredStableFrames: 2,
+            requiredStableDuration: TimeSpan.FromMilliseconds(500));
+        DateTimeOffset started = DateTimeOffset.UtcNow;
+        int[,] frame = CreateFrame(100);
+
+        Assert.False(tracker.AddFrame(frame, started));
+        Assert.False(tracker.AddFrame(frame, started.AddMilliseconds(499)));
+        Assert.True(tracker.AddFrame(frame, started.AddMilliseconds(500)));
+    }
+
+    [Fact]
+    public void RestartsStableDurationWhenBoardChanges()
+    {
+        var tracker = new BoardStabilityTracker(
+            requiredStableFrames: 2,
+            requiredStableDuration: TimeSpan.FromMilliseconds(500));
+        DateTimeOffset started = DateTimeOffset.UtcNow;
+
+        Assert.False(tracker.AddFrame(CreateFrame(100), started));
+        Assert.False(tracker.AddFrame(CreateFrame(100), started.AddMilliseconds(300)));
+        Assert.False(tracker.AddFrame(CreateFrame(120), started.AddMilliseconds(400)));
+        Assert.False(tracker.AddFrame(CreateFrame(120), started.AddMilliseconds(899)));
+        Assert.True(tracker.AddFrame(CreateFrame(120), started.AddMilliseconds(900)));
+    }
+
+    [Fact]
     public void RejectsMalformedBoardFrames()
     {
         var tracker = new BoardStabilityTracker();

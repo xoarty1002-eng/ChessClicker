@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Timer = System.Windows.Forms.Timer;
@@ -41,6 +43,7 @@ namespace ChessClicker
             playButton.Click += PlayButton_Click;
             settingsButton.Click += btnSettings_Click;
             clickMoveButton.Click += ClickMoveButton_Click;
+            scanFenButton.Click += ScanFenButton_Click;
             KeyDown += Form1_KeyDown;
             moveInputTextBox.KeyDown += MoveInputTextBox_KeyDown;
 
@@ -346,8 +349,7 @@ namespace ChessClicker
                 DetectBoardOrientation(baseline);
                 if (!_positionInitialized || _startingPositionResetPending)
                 {
-                    _controller.ResetPosition(GetStartingFenForBottomSide(
-                        _settings.StartingPositionFen, _isWhiteView));
+                    _controller.ResetPosition(_settings.StartingPositionFen);
                     _positionInitialized = true;
                     _startingPositionResetPending = false;
                 }
@@ -355,10 +357,14 @@ namespace ChessClicker
                 _controller.ResetBoardTracking(baseline);
                 SetPreview(baseline);
                 _lastAutoCalibrationAttempt = DateTime.UtcNow;
+                _controller.StartAutomation();
                 _timerGameLoop.Start();
                 playButton.Text = "Stop (F2)";
                 UpdateStatusLabel();
-                Log($"[Play] Scanning continuously at {_settings.FramesPerSecond} FPS. Press F2 to stop.");
+                string playDescription = _settings.PlayMode == "Solo"
+                    ? $"Solo mode; engine controls the {_settings.EngineSide} side"
+                    : "Duo mode; the engine controls both sides";
+                Log($"[Play] {playDescription}. Scanning at {_settings.FramesPerSecond} FPS. Press F2 to stop.");
                 _ = _controller.RequestEngineMoveAsync(_activeBoardBounds, _isWhiteView);
             }
             catch (Exception ex)
@@ -370,6 +376,7 @@ namespace ChessClicker
         private void StopPlaying()
         {
             _timerGameLoop.Stop();
+            _controller.StopAutomation();
             playButton.Text = "Play (F2)";
             UpdateStatusLabel();
             Log("[Play] Stopped.");
@@ -386,16 +393,6 @@ namespace ChessClicker
             _isWhiteView = _controller.DetectWhiteView(boardImage);
             _orientationDetected = true;
             UpdateStatusLabel();
-        }
-
-        private static string GetStartingFenForBottomSide(string fen, bool isWhiteView)
-        {
-            string[] fields = fen.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            if (fields.Length < 2)
-                throw new FormatException("The starting FEN must contain an active-color field.");
-
-            fields[1] = isWhiteView ? "w" : "b";
-            return string.Join(' ', fields);
         }
 
         private void Form1_KeyDown(object? sender, KeyEventArgs e)
@@ -441,9 +438,26 @@ namespace ChessClicker
 
         private async Task SubmitTypedMoveAsync()
         {
+            ParsedChessPositionInput parsedInput;
+            try
+            {
+                parsedInput = ChessPositionInput.Parse(moveInputTextBox.Text);
+            }
+            catch (Exception ex)
+            {
+                Log($"[Input] {ex.Message}");
+                return;
+            }
+
             if (_controller.IsBusy)
             {
-                Log("[Move input] Wait for the current move operation to finish.");
+                Log("[Input] Wait for the current operation to finish.");
+                return;
+            }
+
+            if (parsedInput.Kind == ChessPositionInputKind.Fen)
+            {
+                await LoadFenAndSuggestAsync(parsedInput.Value);
                 return;
             }
 
@@ -463,19 +477,120 @@ namespace ChessClicker
 
                 if (!_positionInitialized || _startingPositionResetPending)
                 {
-                    _controller.ResetPosition(GetStartingFenForBottomSide(
-                        _settings.StartingPositionFen, _isWhiteView));
+                    _controller.ResetPosition(_settings.StartingPositionFen);
                     _positionInitialized = true;
                     _startingPositionResetPending = false;
                 }
 
                 await _controller.ExecuteTypedMoveAsync(
-                    moveInputTextBox.Text, _activeBoardBounds, _isWhiteView);
+                    parsedInput.Value, _activeBoardBounds, _isWhiteView);
             }
             catch (Exception ex)
             {
                 Log($"[Move input] {ex.Message}");
             }
+        }
+
+        private async Task LoadFenAndSuggestAsync(string fen)
+        {
+            try
+            {
+                if (_timerGameLoop.Enabled)
+                    StopPlaying();
+
+                _controller.ResetPosition(fen);
+                _positionInitialized = true;
+                _startingPositionResetPending = false;
+                if (_activeBoardBounds.Width >= 40 && _activeBoardBounds.Height >= 40)
+                {
+                    using Bitmap frame = _controller.CaptureBoard(_activeBoardBounds);
+                    _controller.ResetBoardTracking(frame);
+                    SetPreview(frame);
+                }
+
+                string? suggestion = await _controller.GetEngineSuggestionAsync();
+                if (suggestion != null)
+                    Log($"[FEN suggestion] {suggestion}. This is a suggestion; no board click was sent.");
+            }
+            catch (Exception ex)
+            {
+                Log($"[FEN Error] {ex.Message}");
+            }
+        }
+
+        private async void ScanFenButton_Click(object? sender, EventArgs e)
+        {
+            if (_controller.IsBusy)
+            {
+                Log("[FEN scan] Wait for the current operation to finish.");
+                return;
+            }
+            if (_activeBoardBounds.Width < 40 || _activeBoardBounds.Height < 40)
+            {
+                Log("[FEN scan] Calibrate the board before scanning piece appearances.");
+                return;
+            }
+
+            try
+            {
+                string fen;
+                if (!string.IsNullOrWhiteSpace(moveInputTextBox.Text))
+                {
+                    ParsedChessPositionInput input = ChessPositionInput.Parse(moveInputTextBox.Text);
+                    if (input.Kind != ChessPositionInputKind.Fen)
+                    {
+                        Log("[FEN scan] Enter the exact current FEN in the input box first.");
+                        return;
+                    }
+                    fen = input.Value;
+                }
+                else
+                {
+                    fen = _settings.StartingPositionFen;
+                }
+
+                using Bitmap image = _controller.CaptureBoard(_activeBoardBounds);
+                DetectBoardOrientation(image);
+                IReadOnlyList<PieceAppearanceSample> samples =
+                    PieceAppearanceImageSampler.ExtractSamples(image, fen, _isWhiteView);
+                PieceAppearanceReport report = PieceAppearanceAnalyzer.Analyze(
+                    samples, _settings.MinimumPieceSignatureSeparationPercent);
+
+                if (report.MissingPieces.Count > 0)
+                {
+                    string missing = string.Join(", ", report.MissingPieces.Select(FormatPieceLabel));
+                    Log($"[FEN scan incomplete] Position lacks samples for: {missing}. Use a position containing both colors of all six piece types.");
+                    return;
+                }
+
+                string first = FormatPieceLabel(report.FirstClosestPiece);
+                string second = FormatPieceLabel(report.SecondClosestPiece);
+                Log(report.IsSeparable
+                    ? $"[FEN scan passed] All 12 piece classes are represented. Closest contrast/shape signatures: {first} vs {second}, {report.MinimumSeparationPercent:0.0}% (minimum {_settings.MinimumPieceSignatureSeparationPercent}%)."
+                    : $"[FEN scan failed] {first} and {second} signatures are only {report.MinimumSeparationPercent:0.0}% apart; minimum is {_settings.MinimumPieceSignatureSeparationPercent}%. Adjust calibration, theme, or the settings threshold.");
+                foreach ((char piece, int count) in report.SampleCounts.OrderBy(pair => pair.Key))
+                    Log($"[FEN scan sample] {FormatPieceLabel(piece)}: {count} figure(s).");
+            }
+            catch (Exception ex)
+            {
+                Log($"[FEN scan error] {ex.Message}");
+            }
+        }
+
+        private static string FormatPieceLabel(char piece)
+        {
+            string color = char.IsUpper(piece) ? "White" : "Black";
+            string name = char.ToUpperInvariant(piece) switch
+            {
+                'K' => "King",
+                'Q' => "Queen",
+                'R' => "Rook",
+                'B' => "Bishop",
+                'N' => "Knight",
+                'P' => "Pawn",
+                _ => "Unknown"
+            };
+            return $"{color} {name}";
         }
 
         private void btnSettings_Click(object? sender, EventArgs e)
@@ -504,6 +619,8 @@ namespace ChessClicker
 
             bool startingPositionChanged =
                 !string.Equals(_settings.StartingPositionFen, updatedSettings.StartingPositionFen, StringComparison.Ordinal);
+            bool engineSideChanged =
+                !string.Equals(_settings.EngineSide, updatedSettings.EngineSide, StringComparison.Ordinal);
             bool isPlaying = _timerGameLoop.Enabled;
             try
             {
@@ -520,16 +637,16 @@ namespace ChessClicker
             _timerGameLoop.Interval = 1000 / _settings.FramesPerSecond;
             ApplyPreviewSettings();
             UpdateStatusLabel();
-            if (startingPositionChanged)
+            if (startingPositionChanged || engineSideChanged)
             {
                 _startingPositionResetPending = true;
                 if (isPlaying)
                 {
-                    Log("[Settings] New FEN will be loaded when Play is started again.");
+                    Log("[Settings] New position/engine side will be loaded when Play is started again.");
                 }
                 else
                 {
-                    Log("[Settings] The new FEN will load when Play starts, with the detected bottom-side color to move.");
+                    Log("[Settings] The configured FEN and active color will load when Play starts.");
                 }
             }
 
@@ -584,6 +701,7 @@ namespace ChessClicker
             _desktopMouseHook?.Dispose();
             _timerGameLoop.Stop();
             _timerGameLoop.Dispose();
+            _controller.StopAutomation();
             base.OnFormClosed(e);
         }
 

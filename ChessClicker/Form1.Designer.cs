@@ -9,6 +9,7 @@ namespace ChessClicker
         private Button playButton = null!;
         private Button calibrateButton = null!;
         private Button settingsButton = null!;
+        private Button scanFenButton = null!;
         private Label statusLabel = null!;
         private TextBox moveInputTextBox = null!;
         private Button clickMoveButton = null!;
@@ -30,13 +31,14 @@ namespace ChessClicker
             playButton = new Button();
             calibrateButton = new Button();
             settingsButton = new Button();
+            scanFenButton = new Button();
             statusLabel = new Label();
             moveInputTextBox = new TextBox();
             clickMoveButton = new Button();
             var root = new TableLayoutPanel();
             var footer = new TableLayoutPanel();
             var buttons = new FlowLayoutPanel();
-            var inputPanel = new FlowLayoutPanel();
+            var inputPanel = new TableLayoutPanel();
 
             ((System.ComponentModel.ISupportInitialize)previewPictureBox).BeginInit();
             SuspendLayout();
@@ -45,8 +47,8 @@ namespace ChessClicker
             root.Padding = new Padding(8);
             root.ColumnCount = 1;
             root.RowCount = 2;
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 62));
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 38));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 55));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 45));
 
             previewPictureBox.Dock = DockStyle.Fill;
             previewPictureBox.BackColor = Color.FromArgb(32, 32, 32);
@@ -57,9 +59,9 @@ namespace ChessClicker
             footer.Dock = DockStyle.Fill;
             footer.ColumnCount = 1;
             footer.RowCount = 4;
-            footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
-            footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
-            footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
+            footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+            footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
+            footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
             footer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
             buttons.Dock = DockStyle.Fill;
@@ -69,12 +71,15 @@ namespace ChessClicker
             buttons.AutoScroll = true;
 
             ConfigureButton(calibrateButton, "Manual calibrate");
+            ConfigureButton(scanFenButton, "Scan FEN");
             ConfigureButton(playButton, "Play (F2)");
             ConfigureButton(settingsButton, "Settings");
-            calibrateButton.Width = 106;
+            calibrateButton.Width = 105;
+            scanFenButton.Width = 80;
             playButton.Width = 82;
             settingsButton.Width = 68;
             buttons.Controls.Add(calibrateButton);
+            buttons.Controls.Add(scanFenButton);
             buttons.Controls.Add(playButton);
             buttons.Controls.Add(settingsButton);
 
@@ -85,25 +90,22 @@ namespace ChessClicker
             statusLabel.Text = "Bottom: unknown | 5 FPS | stopped";
 
             inputPanel.Dock = DockStyle.Fill;
-            inputPanel.WrapContents = false;
-            inputPanel.FlowDirection = FlowDirection.LeftToRight;
-            var moveLabel = new Label
-            {
-                Text = "Move (Enter/F3):",
-                AutoSize = true,
-                TextAlign = ContentAlignment.MiddleLeft,
-                Margin = new Padding(2, 7, 4, 0)
-            };
-            moveInputTextBox.Width = 130;
-            moveInputTextBox.PlaceholderText = "e2e4";
-            clickMoveButton.Text = "Click move (F3)";
-            clickMoveButton.Width = 104;
-            clickMoveButton.Height = 26;
-            clickMoveButton.Margin = new Padding(4, 1, 2, 1);
+            inputPanel.ColumnCount = 2;
+            inputPanel.RowCount = 1;
+            inputPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            inputPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 102));
+            inputPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            inputPanel.Margin = new Padding(0, 0, 0, 4);
+            moveInputTextBox.Dock = DockStyle.Fill;
+            moveInputTextBox.Multiline = true;
+            moveInputTextBox.ScrollBars = ScrollBars.Vertical;
+            moveInputTextBox.PlaceholderText = "Enter UCI move (e2e4) or full FEN";
+            clickMoveButton.Text = "Analyze / Click\n(F3)";
+            clickMoveButton.Dock = DockStyle.Fill;
+            clickMoveButton.Margin = new Padding(4, 0, 0, 0);
             clickMoveButton.UseVisualStyleBackColor = true;
-            inputPanel.Controls.Add(moveLabel);
-            inputPanel.Controls.Add(moveInputTextBox);
-            inputPanel.Controls.Add(clickMoveButton);
+            inputPanel.Controls.Add(moveInputTextBox, 0, 0);
+            inputPanel.Controls.Add(clickMoveButton, 1, 0);
 
             logTextBox.Dock = DockStyle.Fill;
             logTextBox.Multiline = true;
@@ -121,8 +123,8 @@ namespace ChessClicker
             Controls.Add(root);
             AutoScaleDimensions = new SizeF(8F, 20F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(450, 450);
-            MinimumSize = new Size(100, 100);
+            ClientSize = new Size(520, 560);
+            MinimumSize = new Size(500, 500);
             KeyPreview = true;
             Name = "Form1";
             Text = "ChessClicker";

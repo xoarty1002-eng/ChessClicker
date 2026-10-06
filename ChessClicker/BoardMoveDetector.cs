@@ -35,6 +35,10 @@ namespace ChessClicker
                 squares.Add($"{fileChar}{rankNumber}");
             }
 
+            string? castlingMove = GetCastlingMove(squares);
+            if (castlingMove != null)
+                return castlingMove;
+
             string[] orderedSquares = squares.ToArray();
             List<string> candidates = new(orderedSquares.Length * Math.Max(0, orderedSquares.Length - 1));
             for (int from = 0; from < orderedSquares.Length; from++)
@@ -43,6 +47,22 @@ namespace ChessClicker
                         candidates.Add(orderedSquares[from] + orderedSquares[to]);
 
             return string.Join('|', candidates);
+        }
+
+        private static string? GetCastlingMove(HashSet<string> changedSquares)
+        {
+            if (changedSquares.Count != 4)
+                return null;
+
+            if (changedSquares.SetEquals(["e1", "g1", "h1", "f1"]))
+                return "e1g1";
+            if (changedSquares.SetEquals(["e1", "c1", "a1", "d1"]))
+                return "e1c1";
+            if (changedSquares.SetEquals(["e8", "g8", "h8", "f8"]))
+                return "e8g8";
+            if (changedSquares.SetEquals(["e8", "c8", "a8", "d8"]))
+                return "e8c8";
+            return null;
         }
     }
 }

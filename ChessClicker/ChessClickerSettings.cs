@@ -17,6 +17,11 @@ namespace ChessClicker
         public bool CalibrateWhilePlaying { get; }
         public int PreviewSmoothingPercent { get; }
         public string StartingPositionFen { get; }
+        public string EnginePath { get; }
+        public string PlayMode { get; }
+        public string EngineSide { get; }
+        public int StableBoardDurationMilliseconds { get; }
+        public int MinimumPieceSignatureSeparationPercent { get; }
 
         [JsonConstructor]
         public ChessClickerSettings(
@@ -29,7 +34,12 @@ namespace ChessClicker
             int randomSkillIntervalTurns = 1,
             bool calibrateWhilePlaying = false,
             int previewSmoothingPercent = 50,
-            string startingPositionFen = ChessBoard.StandardStartingFen)
+            string startingPositionFen = ChessBoard.StandardStartingFen,
+            string enginePath = "",
+            string playMode = "Solo",
+            string engineSide = "Bottom",
+            int stableBoardDurationMilliseconds = 500,
+            int minimumPieceSignatureSeparationPercent = 8)
         {
             if (moveTimeMilliseconds < 100 || moveTimeMilliseconds > 10000)
                 throw new ArgumentOutOfRangeException(nameof(moveTimeMilliseconds), "Move time must be between 100 and 10000 milliseconds.");
@@ -45,6 +55,18 @@ namespace ChessClicker
                 throw new ArgumentOutOfRangeException(nameof(randomSkillIntervalTurns), "Random skill interval must be between 1 and 100 turns.");
             if (previewSmoothingPercent < 0 || previewSmoothingPercent > 100)
                 throw new ArgumentOutOfRangeException(nameof(previewSmoothingPercent), "Preview smoothing must be between 0 and 100 percent.");
+            if (playMode is not ("Solo" or "Duo"))
+                throw new ArgumentException("Play mode must be Solo or Duo.", nameof(playMode));
+            if (engineSide is not ("Top" or "Bottom"))
+                throw new ArgumentException("Engine side must be Top or Bottom.", nameof(engineSide));
+            if (stableBoardDurationMilliseconds < 500 || stableBoardDurationMilliseconds > 10000)
+                throw new ArgumentOutOfRangeException(
+                    nameof(stableBoardDurationMilliseconds),
+                    "Stable-board duration must be between 500 and 10000 milliseconds.");
+            if (minimumPieceSignatureSeparationPercent is < 1 or > 100)
+                throw new ArgumentOutOfRangeException(
+                    nameof(minimumPieceSignatureSeparationPercent),
+                    "Minimum piece signature separation must be between 1 and 100 percent.");
             ArgumentException.ThrowIfNullOrWhiteSpace(startingPositionFen);
             _ = new ChessBoard(startingPositionFen);
 
@@ -58,6 +80,11 @@ namespace ChessClicker
             CalibrateWhilePlaying = calibrateWhilePlaying;
             PreviewSmoothingPercent = previewSmoothingPercent;
             StartingPositionFen = startingPositionFen.Trim();
+            EnginePath = enginePath?.Trim() ?? throw new ArgumentNullException(nameof(enginePath));
+            PlayMode = playMode;
+            EngineSide = engineSide;
+            StableBoardDurationMilliseconds = stableBoardDurationMilliseconds;
+            MinimumPieceSignatureSeparationPercent = minimumPieceSignatureSeparationPercent;
         }
 
         public static ChessClickerSettings Default { get; } = new(1000, 20);
