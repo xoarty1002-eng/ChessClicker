@@ -33,6 +33,7 @@ public sealed class ChessClickerSettingsTests
         Assert.False(ChessClickerSettings.Default.RandomizeStockfishSkill);
         Assert.Equal(1, ChessClickerSettings.Default.RandomSkillIntervalTurns);
         Assert.False(ChessClickerSettings.Default.CalibrateWhilePlaying);
+        Assert.Equal(50, ChessClickerSettings.Default.PreviewSmoothingPercent);
     }
 
     [Theory]
@@ -50,11 +51,20 @@ public sealed class ChessClickerSettingsTests
             1000, 20, framesPerSecond, brightnessThreshold, theme, false, randomSkillInterval));
     }
 
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(101)]
+    public void RejectsUnsupportedPreviewSmoothing(int smoothingPercent)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new ChessClickerSettings(
+            1000, 20, previewSmoothingPercent: smoothingPercent));
+    }
+
     [Fact]
     public void SavesAndLoadsConfiguredPreviewRate()
     {
         string path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "settings.json");
-        var expected = new ChessClickerSettings(1500, 14, 12, 22, "Blue", true, 3, true);
+        var expected = new ChessClickerSettings(1500, 14, 12, 22, "Blue", true, 3, true, 75);
 
         try
         {
@@ -69,6 +79,31 @@ public sealed class ChessClickerSettingsTests
             Assert.Equal(expected.RandomizeStockfishSkill, actual.RandomizeStockfishSkill);
             Assert.Equal(expected.RandomSkillIntervalTurns, actual.RandomSkillIntervalTurns);
             Assert.Equal(expected.CalibrateWhilePlaying, actual.CalibrateWhilePlaying);
+            Assert.Equal(expected.PreviewSmoothingPercent, actual.PreviewSmoothingPercent);
+        }
+        finally
+        {
+            string? directory = Path.GetDirectoryName(path);
+            if (directory != null && Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void LoadsOlderSettingsWithoutSmoothingAsFiftyPercent()
+    {
+        string path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "settings.json");
+
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path,
+                """{"MoveTimeMilliseconds":1000,"StockfishSkillLevel":20}""");
+
+            ChessClickerSettings loaded = ChessClickerSettings.LoadFromFile(path);
+
+            Assert.Equal(50, loaded.PreviewSmoothingPercent);
+            Assert.False(loaded.CalibrateWhilePlaying);
         }
         finally
         {

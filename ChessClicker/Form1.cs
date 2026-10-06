@@ -44,6 +44,7 @@ namespace ChessClicker
             LoadBoardBounds();
             _timerGameLoop.Interval = 1000 / _settings.FramesPerSecond;
             _timerGameLoop.Tick += TimerGameLoop_Tick;
+            ApplyPreviewSettings();
             UpdateStatusLabel();
         }
 
@@ -396,8 +397,14 @@ namespace ChessClicker
             _settings = updatedSettings;
             _controller.UpdateSettings(_settings);
             _timerGameLoop.Interval = 1000 / _settings.FramesPerSecond;
+            ApplyPreviewSettings();
             UpdateStatusLabel();
-            Log($"[Settings] Saved. Preview rate: {_settings.FramesPerSecond} FPS; calibrate while playing: {_settings.CalibrateWhilePlaying}.");
+            Log($"[Settings] Saved. Preview rate: {_settings.FramesPerSecond} FPS; smoothing: {_settings.PreviewSmoothingPercent}%; calibrate while playing: {_settings.CalibrateWhilePlaying}.");
+        }
+
+        private void ApplyPreviewSettings()
+        {
+            previewPictureBox.SmoothingPercent = _settings.PreviewSmoothingPercent;
         }
 
         private void EnsureDesktopMouseHook()
@@ -415,7 +422,7 @@ namespace ChessClicker
             string state = _isCalibrating
                 ? "calibrating"
                 : _timerGameLoop.Enabled ? "playing" : "stopped";
-            statusLabel.Text = $"Preview: {_settings.FramesPerSecond} FPS | {state} | {DateTime.Now:HH:mm:ss.fff}";
+            statusLabel.Text = $"Preview: {_settings.FramesPerSecond} FPS | smooth {_settings.PreviewSmoothingPercent}% | {state} | {DateTime.Now:HH:mm:ss.fff}";
         }
 
         private static string GetBoardBoundsPath() =>

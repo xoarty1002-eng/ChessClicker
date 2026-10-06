@@ -15,6 +15,7 @@ namespace ChessClicker
         public bool RandomizeStockfishSkill { get; }
         public int RandomSkillIntervalTurns { get; }
         public bool CalibrateWhilePlaying { get; }
+        public int PreviewSmoothingPercent { get; }
 
         [JsonConstructor]
         public ChessClickerSettings(
@@ -25,7 +26,8 @@ namespace ChessClicker
             string boardTheme = "Green",
             bool randomizeStockfishSkill = false,
             int randomSkillIntervalTurns = 1,
-            bool calibrateWhilePlaying = false)
+            bool calibrateWhilePlaying = false,
+            int previewSmoothingPercent = 50)
         {
             if (moveTimeMilliseconds < 100 || moveTimeMilliseconds > 10000)
                 throw new ArgumentOutOfRangeException(nameof(moveTimeMilliseconds), "Move time must be between 100 and 10000 milliseconds.");
@@ -39,6 +41,8 @@ namespace ChessClicker
                 throw new ArgumentException("Choose a supported board theme.", nameof(boardTheme));
             if (randomSkillIntervalTurns < 1 || randomSkillIntervalTurns > 100)
                 throw new ArgumentOutOfRangeException(nameof(randomSkillIntervalTurns), "Random skill interval must be between 1 and 100 turns.");
+            if (previewSmoothingPercent < 0 || previewSmoothingPercent > 100)
+                throw new ArgumentOutOfRangeException(nameof(previewSmoothingPercent), "Preview smoothing must be between 0 and 100 percent.");
 
             MoveTimeMilliseconds = moveTimeMilliseconds;
             StockfishSkillLevel = stockfishSkillLevel;
@@ -48,6 +52,7 @@ namespace ChessClicker
             RandomizeStockfishSkill = randomizeStockfishSkill;
             RandomSkillIntervalTurns = randomSkillIntervalTurns;
             CalibrateWhilePlaying = calibrateWhilePlaying;
+            PreviewSmoothingPercent = previewSmoothingPercent;
         }
 
         public static ChessClickerSettings Default { get; } = new(1000, 20);

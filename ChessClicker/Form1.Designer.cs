@@ -4,7 +4,7 @@ namespace ChessClicker
     partial class Form1
     {
         private System.ComponentModel.IContainer? components = null;
-        private PictureBox previewPictureBox = null!;
+        private BoardPreviewControl previewPictureBox = null!;
         private TextBox logTextBox = null!;
         private Button playButton = null!;
         private Button calibrateButton = null!;
@@ -23,7 +23,7 @@ namespace ChessClicker
 
         private void InitializeComponent()
         {
-            previewPictureBox = new PictureBox();
+            previewPictureBox = new BoardPreviewControl();
             logTextBox = new TextBox();
             playButton = new Button();
             calibrateButton = new Button();
@@ -46,6 +46,7 @@ namespace ChessClicker
             previewPictureBox.Dock = DockStyle.Fill;
             previewPictureBox.BackColor = Color.FromArgb(32, 32, 32);
             previewPictureBox.SizeMode = PictureBoxSizeMode.Zoom;
+            previewPictureBox.SmoothingPercent = 50;
             previewPictureBox.Margin = new Padding(0, 0, 0, 6);
 
             footer.Dock = DockStyle.Fill;
@@ -56,15 +57,16 @@ namespace ChessClicker
 
             buttons.Dock = DockStyle.Fill;
             buttons.FlowDirection = FlowDirection.LeftToRight;
-            buttons.WrapContents = false;
+            buttons.WrapContents = true;
             buttons.Padding = new Padding(0);
+            buttons.AutoScroll = true;
 
             ConfigureButton(calibrateButton, "Manual calibrate");
             ConfigureButton(playButton, "Play (F2)");
             ConfigureButton(settingsButton, "Settings");
-            calibrateButton.Width = 150;
-            playButton.Width = 130;
-            settingsButton.Width = 110;
+            calibrateButton.Width = 112;
+            playButton.Width = 84;
+            settingsButton.Width = 72;
             buttons.Controls.Add(calibrateButton);
             buttons.Controls.Add(playButton);
             buttons.Controls.Add(settingsButton);
@@ -89,8 +91,8 @@ namespace ChessClicker
             Controls.Add(root);
             AutoScaleDimensions = new SizeF(8F, 20F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(820, 620);
-            MinimumSize = new Size(680, 500);
+            ClientSize = new Size(300, 300);
+            MinimumSize = new Size(100, 100);
             KeyPreview = true;
             Name = "Form1";
             Text = "ChessClicker";
@@ -105,5 +107,6 @@ namespace ChessClicker
             button.Margin = new Padding(3, 2, 8, 2);
             button.UseVisualStyleBackColor = true;
         }
+
     }
 }
