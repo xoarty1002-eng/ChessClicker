@@ -18,10 +18,10 @@ dotnet build ChessClicker.slnx -p:EnableWindowsTargeting=true
 
 1. Build and start ChessClicker on Windows.
 2. Open a local chessboard or a site's analysis board. Do not use engine assistance in a live rated or casual game; follow the site's fair-play rules.
-3. Choose **Calibrate**, then click the chessboard's outer top-left and bottom-right corners in that order. **Auto-fit** expands the capture slightly and searches for the strongest 8×8 grid-edge alignment; check the preview and recalibrate manually if the fit is wrong.
-4. Check the captured board preview and click **Start Scanner Loop**.
-5. Use **Settings** to choose Stockfish thinking time (100–10,000 ms) and skill level (0–20).
-6. To register a move, click its source square and then its destination square. **Play Move** asks Stockfish for a move from the tracked position and clicks the corresponding squares. The app waits up to three seconds for the captured board to show the move before updating its tracked position. If the board does not reflect the click, the move is reported as unconfirmed and the app does not pretend the position advanced; keep the scanner running to allow later synchronization.
+3. Choose **Manual Calibrate: select corners**, then click the chessboard's outer top-left and bottom-right corners in that order. **Auto-calibrate full screen** searches the full virtual desktop for an 8×8 grid, using the saved board size when available or a screen-size estimate otherwise. Check the preview and recalibrate manually if the fit is wrong.
+4. Click **Start Scanning** to see a live board preview with an 8×8 debug grid and coordinate labels. The tracked position and timestamped log are displayed separately.
+5. Use **Settings** to choose Stockfish thinking time (100–10,000 ms), skill level (0–20), preview/scanning rate (1–30 FPS), brightness-change sensitivity, and the color theme for the debug grid and coordinate labels. Optionally randomize the Stockfish skill from 0–20 every turn or every N engine turns.
+6. To register a move, click its source square and then its destination square, or enter UCI notation (for example `e2e4`) in the move field and press Enter or **Click Typed Move**. **Get Stockfish Move** asks for a move from the tracked position and clicks the corresponding squares. The app waits up to eight seconds for the captured board to show the move before updating its tracked position. If confirmation times out, it restores the pre-move scan baseline so a delayed visual update can still be detected on a later frame.
 
 Calibration, screen capture, and mouse automation require a visible desktop. They do not work against a browser page fetched in the background.
 

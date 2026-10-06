@@ -1,123 +1,152 @@
-﻿namespace ChessClicker
+#nullable enable
+namespace ChessClicker
 {
     partial class Form1
     {
-        /// <summary>
-        ///  Required designer variable.
-        /// </summary>
-        private System.ComponentModel.IContainer components = null;
+        private System.ComponentModel.IContainer? components = null;
+        private PictureBox previewPictureBox = null!;
+        private TextBox positionTextBox = null!;
+        private TextBox logTextBox = null!;
+        private TextBox moveInputTextBox = null!;
+        private Button playMoveButton = null!;
+        private Button scannerButton = null!;
+        private Button calibrateButton = null!;
+        private Button autoCalibrateButton = null!;
+        private Button settingsButton = null!;
+        private Button executeTypedMoveButton = null!;
+        private Label fpsLabel = null!;
 
-        /// <summary>
-        ///  Clean up any resources being used.
-        /// </summary>
-        /// <param name="disposing">true if managed resources should be disposed; otherwise, false.</param>
         protected override void Dispose(bool disposing)
         {
-            if (disposing && (components != null))
+            if (disposing)
             {
-                components.Dispose();
+                components?.Dispose();
+                previewPictureBox?.Image?.Dispose();
             }
             base.Dispose(disposing);
         }
 
-        #region Windows Form Designer generated code
-
-        /// <summary>
-        ///  Required method for Designer support - do not modify
-        ///  the contents of this method with the code editor.
-        /// </summary>
         private void InitializeComponent()
         {
-            button1 = new Button();
-            pictureBox1 = new PictureBox();
-            textBox1 = new TextBox();
-            button2 = new Button();
-            button3 = new Button();
-            button4 = new Button();
-            ((System.ComponentModel.ISupportInitialize)pictureBox1).BeginInit();
+            previewPictureBox = new PictureBox();
+            positionTextBox = new TextBox();
+            logTextBox = new TextBox();
+            moveInputTextBox = new TextBox();
+            playMoveButton = new Button();
+            scannerButton = new Button();
+            calibrateButton = new Button();
+            autoCalibrateButton = new Button();
+            settingsButton = new Button();
+            executeTypedMoveButton = new Button();
+            fpsLabel = new Label();
+            var root = new TableLayoutPanel();
+            var rightPanel = new FlowLayoutPanel();
+            var commandLayout = new TableLayoutPanel();
+            ((System.ComponentModel.ISupportInitialize)previewPictureBox).BeginInit();
             SuspendLayout();
-            // 
-            // button1
-            // 
-            button1.Location = new Point(343, 250);
-            button1.Name = "button1";
-            button1.Size = new Size(94, 29);
-            button1.TabIndex = 0;
-            button1.Text = "button1";
-            button1.UseVisualStyleBackColor = true;
-            button1.Click += btnSuggestMove_ClickAsync;
-            // 
-            // pictureBox1
-            // 
-            pictureBox1.Location = new Point(1, 2);
-            pictureBox1.Name = "pictureBox1";
-            pictureBox1.Size = new Size(336, 277);
-            pictureBox1.TabIndex = 1;
-            pictureBox1.TabStop = false;
-            // 
-            // textBox1
-            // 
-            textBox1.Location = new Point(1, 285);
-            textBox1.Multiline = true;
-            textBox1.Name = "textBox1";
-            textBox1.Size = new Size(436, 92);
-            textBox1.TabIndex = 2;
-            // 
-            // button2
-            // 
-            button2.Location = new Point(343, 215);
-            button2.Name = "button2";
-            button2.Size = new Size(94, 29);
-            button2.TabIndex = 3;
-            button2.Text = "button2";
-            button2.UseVisualStyleBackColor = true;
-            button2.Click += btnToggleScanner_Click;
-            //
-            // button3
-            //
-            button3.Location = new Point(343, 180);
-            button3.Name = "button3";
-            button3.Size = new Size(94, 29);
-            button3.TabIndex = 4;
-            button3.Text = "Settings";
-            button3.UseVisualStyleBackColor = true;
-            button3.Click += btnSettings_Click;
-            //
-            // button4
-            //
-            button4.Location = new Point(343, 145);
-            button4.Name = "button4";
-            button4.Size = new Size(94, 29);
-            button4.TabIndex = 5;
-            button4.Text = "Auto-fit";
-            button4.UseVisualStyleBackColor = true;
-            button4.Click += btnAutoCalibrate_Click;
-            // 
-            // Form1
-            // 
+
+            root.ColumnCount = 2;
+            root.RowCount = 2;
+            root.Dock = DockStyle.Fill;
+            root.Padding = new Padding(8);
+            root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 68));
+            root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 32));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 72));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 28));
+
+            previewPictureBox.Dock = DockStyle.Fill;
+            previewPictureBox.BackColor = Color.FromArgb(32, 32, 32);
+            previewPictureBox.SizeMode = PictureBoxSizeMode.Zoom;
+            previewPictureBox.Margin = new Padding(0, 0, 8, 8);
+
+            rightPanel.Dock = DockStyle.Fill;
+            rightPanel.FlowDirection = FlowDirection.TopDown;
+            rightPanel.WrapContents = false;
+            rightPanel.AutoScroll = true;
+            rightPanel.Padding = new Padding(4);
+
+            fpsLabel.Text = "Preview: stopped";
+            fpsLabel.AutoSize = true;
+            fpsLabel.Margin = new Padding(4, 4, 4, 12);
+
+            ConfigureButton(calibrateButton, "Manual Calibrate: select corners");
+            ConfigureButton(autoCalibrateButton, "Auto-calibrate full screen");
+            ConfigureButton(scannerButton, "Start Scanning");
+            ConfigureButton(playMoveButton, "Get Stockfish Move");
+            ConfigureButton(settingsButton, "Settings");
+            ConfigureButton(executeTypedMoveButton, "Click Typed Move");
+
+            var moveLabel = new Label
+            {
+                Text = "Move in UCI notation (for example e2e4):",
+                AutoSize = true,
+                Margin = new Padding(4, 14, 4, 2)
+            };
+            moveInputTextBox.Width = 300;
+            moveInputTextBox.PlaceholderText = "e2e4";
+            moveInputTextBox.Margin = new Padding(4, 2, 4, 2);
+            executeTypedMoveButton.Width = 300;
+
+            var positionLabel = new Label
+            {
+                Text = "Tracked position",
+                AutoSize = true,
+                Margin = new Padding(4, 14, 4, 2)
+            };
+            positionTextBox.Multiline = true;
+            positionTextBox.ReadOnly = true;
+            positionTextBox.ScrollBars = ScrollBars.Vertical;
+            positionTextBox.WordWrap = false;
+            positionTextBox.Width = 300;
+            positionTextBox.Height = 180;
+            positionTextBox.Margin = new Padding(4, 2, 4, 4);
+
+            rightPanel.Controls.Add(fpsLabel);
+            rightPanel.Controls.Add(calibrateButton);
+            rightPanel.Controls.Add(autoCalibrateButton);
+            rightPanel.Controls.Add(scannerButton);
+            rightPanel.Controls.Add(playMoveButton);
+            rightPanel.Controls.Add(settingsButton);
+            rightPanel.Controls.Add(moveLabel);
+            rightPanel.Controls.Add(moveInputTextBox);
+            rightPanel.Controls.Add(executeTypedMoveButton);
+            rightPanel.Controls.Add(positionLabel);
+            rightPanel.Controls.Add(positionTextBox);
+
+            commandLayout.Dock = DockStyle.Fill;
+            commandLayout.ColumnCount = 1;
+            commandLayout.RowCount = 1;
+            commandLayout.Padding = new Padding(4);
+            commandLayout.Controls.Add(logTextBox, 0, 0);
+            logTextBox.Dock = DockStyle.Fill;
+            logTextBox.Multiline = true;
+            logTextBox.ReadOnly = true;
+            logTextBox.ScrollBars = ScrollBars.Vertical;
+            logTextBox.WordWrap = false;
+
+            root.Controls.Add(previewPictureBox, 0, 0);
+            root.Controls.Add(rightPanel, 1, 0);
+            root.Controls.Add(commandLayout, 0, 1);
+            root.SetColumnSpan(commandLayout, 2);
+
+            Controls.Add(root);
             AutoScaleDimensions = new SizeF(8F, 20F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(444, 389);
-            Controls.Add(button2);
-            Controls.Add(button3);
-            Controls.Add(button4);
-            Controls.Add(textBox1);
-            Controls.Add(pictureBox1);
-            Controls.Add(button1);
+            ClientSize = new Size(1180, 820);
+            MinimumSize = new Size(950, 680);
             Name = "Form1";
-            Text = "Form1";
-            ((System.ComponentModel.ISupportInitialize)pictureBox1).EndInit();
+            Text = "ChessClicker - Private Analysis";
+            ((System.ComponentModel.ISupportInitialize)previewPictureBox).EndInit();
             ResumeLayout(false);
-            PerformLayout();
         }
 
-        #endregion
-
-        private Button button1;
-        private PictureBox pictureBox1;
-        private TextBox textBox1;
-        private Button button2;
-        private Button button3;
-        private Button button4;
+        private static void ConfigureButton(Button button, string text)
+        {
+            button.Text = text;
+            button.Width = 300;
+            button.Height = 38;
+            button.Margin = new Padding(4);
+            button.UseVisualStyleBackColor = true;
+        }
     }
 }

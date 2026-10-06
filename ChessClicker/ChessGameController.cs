@@ -15,8 +15,9 @@ namespace ChessClicker
         private bool? _lastDetectedWhiteView;
         private ChessClickerSettings _settings = ChessClickerSettings.Default;
 
-        private static readonly TimeSpan MoveConfirmationTimeout = TimeSpan.FromSeconds(3);
+        private static readonly TimeSpan MoveConfirmationTimeout = TimeSpan.FromSeconds(8);
         private static readonly TimeSpan MoveConfirmationPollInterval = TimeSpan.FromMilliseconds(200);
+        private int _engineTurnCount;
 
         public event Action<string>? StatusChanged;
         public event Action<string>? BoardChanged;
@@ -26,6 +27,7 @@ namespace ChessClicker
         public void UpdateSettings(ChessClickerSettings settings)
         {
             _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+            _engineTurnCount = 0;
         }
 
         public Bitmap CaptureBoard(Rectangle bounds)
@@ -52,7 +54,8 @@ namespace ChessClicker
             IsBusy = true;
             try
             {
-                string? candidates = _scanner.ScanForStateChanges(boardImage, isWhiteView);
+                string? candidates = _scanner.ScanForStateChanges(
+                    boardImage, isWhiteView, _settings.BrightnessThreshold);
                 if (string.IsNullOrEmpty(candidates)) return;
 
                 if (_moveConfirmation.PendingMove is string pendingMove)
@@ -139,9 +142,31 @@ namespace ChessClicker
             }
         }
 
-        public string GetDebugBoardString()
+        public async Task ExecuteTypedMoveAsync(string move, Rectangle bounds, bool isWhiteView)
         {
-            return _board.GetDebugBoardString();
+            if (IsBusy) return;
+            if (_moveConfirmation.PendingMove != null)
+            {
+                StatusChanged?.Invoke(
+                    $"[Move awaiting confirmation] {_moveConfirmation.PendingMove} has not yet been observed on the board.");
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(move))
+                throw new ArgumentException("Enter a move in UCI notation, such as e2e4.", nameof(move));
+
+            move = move.Trim().ToLowerInvariant();
+            if (move.Length < 4 || !IsLegalMove(move[..4]))
+                throw new ArgumentException($"Move {move} is not legal for {_board.Turn} to move.", nameof(move));
+
+            IsBusy = true;
+            try
+            {
+                await SendMoveAndWaitForConfirmationAsync(move, bounds, isWhiteView);
+            }
+            finally
+            {
+                IsBusy = false;
+            }
         }
 
         private async Task ProcessClickedMoveAsync(string move, Rectangle bounds, bool isWhiteView)
@@ -179,23 +204,28 @@ namespace ChessClicker
                 return;
             }
 
-            StatusChanged?.Invoke("[Stockfish] Calculating a move...");
+            int skillLevel = GetSkillLevelForNextTurn();
+            StatusChanged?.Invoke($"[Stockfish] Calculating a move at skill level {skillLevel}/20...");
 
             string enginePath = await _engine.EnsureEngineInstalledAsync();
             string fen = _board.GenerateFen();
             StatusChanged?.Invoke($"[FEN Query] {fen}");
 
             string move = await Task.Run(() =>
-                _engine.GetBestMove(enginePath, fen, _settings.MoveTimeMilliseconds, _settings.StockfishSkillLevel));
+                _engine.GetBestMove(enginePath, fen, _settings.MoveTimeMilliseconds, skillLevel));
             StatusChanged?.Invoke($"[Stockfish Recommendation] {move}");
 
             if (move.Length < 4 || move == "None" || move == "Error starting engine" ||
                 move == "(none)" || move == "0000")
                 return;
 
-            using (Bitmap baseline = CaptureBoard(bounds))
-                _scanner.ResetStateTracking(baseline);
+            await SendMoveAndWaitForConfirmationAsync(move, bounds, isWhiteView);
+        }
 
+        private async Task SendMoveAndWaitForConfirmationAsync(string move, Rectangle bounds, bool isWhiteView)
+        {
+            using Bitmap baseline = CaptureBoard(bounds);
+            _scanner.ResetStateTracking(baseline);
             _moveConfirmation.Expect(move);
             _clicker.ExecuteMoveOnScreen(move, bounds, isWhiteView);
 
@@ -205,22 +235,37 @@ namespace ChessClicker
             {
                 await Task.Delay(MoveConfirmationPollInterval);
                 using Bitmap currentBoard = CaptureBoard(bounds);
-                string? candidates = _scanner.ScanForStateChanges(currentBoard, isWhiteView);
-                if (!string.IsNullOrEmpty(candidates))
-                {
-                    if (ConfirmEngineMove(candidates))
-                    {
-                        NotifyBoardChanged();
-                        StatusChanged?.Invoke($"[Move confirmed] {move} was detected on the board.");
-                        return;
-                    }
+                string? candidates = _scanner.ScanForStateChanges(
+                    currentBoard, isWhiteView, _settings.BrightnessThreshold);
+                if (string.IsNullOrEmpty(candidates))
+                    continue;
 
-                    _scanner.ResetStateTracking(currentBoard);
+                if (ConfirmEngineMove(candidates))
+                {
+                    NotifyBoardChanged();
+                    StatusChanged?.Invoke($"[Move confirmed] {move} was detected on the board.");
+                    return;
                 }
+
+                _scanner.ResetStateTracking(currentBoard);
             }
 
+            _moveConfirmation.Cancel();
+            _scanner.ResetStateTracking(baseline);
             StatusChanged?.Invoke(
-                $"[Move not confirmed] {move} was sent, but no matching board change appeared within {MoveConfirmationTimeout.TotalSeconds:0} seconds. The tracked position was not advanced; keep scanning to synchronize when the move appears.");
+                $"[Move not confirmed] {move} was sent, but no matching board change appeared within {MoveConfirmationTimeout.TotalSeconds:0} seconds. The tracked position was not advanced; scanning remains armed to detect a delayed board update.");
+        }
+
+        private int GetSkillLevelForNextTurn()
+        {
+            if (!_settings.RandomizeStockfishSkill)
+                return _settings.StockfishSkillLevel;
+
+            _engineTurnCount++;
+            if (_engineTurnCount % _settings.RandomSkillIntervalTurns == 0)
+                return Random.Shared.Next(0, 21);
+
+            return _settings.StockfishSkillLevel;
         }
 
         private bool ConfirmEngineMove(string candidates)

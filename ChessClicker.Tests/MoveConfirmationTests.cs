@@ -46,4 +46,16 @@ public sealed class MoveConfirmationTests
         Assert.Throws<ArgumentException>(() => confirmation.Expect("e2"));
         Assert.Null(confirmation.PendingMove);
     }
+
+    [Fact]
+    public void CancelClearsAnUnconfirmedMoveSoScanningCanResume()
+    {
+        var confirmation = new MoveConfirmation();
+        confirmation.Expect("e2e4");
+
+        confirmation.Cancel();
+
+        Assert.Null(confirmation.PendingMove);
+        Assert.False(confirmation.TryConfirm("e2e4", out _));
+    }
 }

@@ -43,4 +43,30 @@ public sealed class BoardGridCalibratorTests
 
         Assert.Null(BoardGridCalibrator.FindBestBounds(image, new Rectangle(10, 10, 80, 80), 8));
     }
+
+    [Fact]
+    public void FindsBoardPositionAcrossFullScreenImage()
+    {
+        int[,] image = new int[190, 220];
+        for (int y = 0; y < image.GetLength(0); y++)
+        {
+            for (int x = 0; x < image.GetLength(1); x++)
+            {
+                bool insideBoard = x >= 40 && x < 160 && y >= 30 && y < 150;
+                if (!insideBoard)
+                {
+                    image[y, x] = 128;
+                    continue;
+                }
+
+                int file = (x - 40) / 15;
+                int rank = (y - 30) / 15;
+                image[y, x] = (rank + file) % 2 == 0 ? 220 : 70;
+            }
+        }
+
+        Rectangle? position = BoardGridCalibrator.FindBestPosition(image, new Size(120, 120), 3);
+
+        Assert.Equal(new Rectangle(40, 30, 120, 120), position);
+    }
 }

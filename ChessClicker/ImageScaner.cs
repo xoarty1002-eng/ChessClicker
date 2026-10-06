@@ -104,7 +104,7 @@ namespace ChessClicker
         /// Compares the current square brightness states with the previous baseline to track state modifications.
         /// </summary>
         /// <returns>A string representation of the move (e.g. "e2e4") if a state change correlates to a valid chess move; otherwise null.</returns>
-        public string? ScanForStateChanges(Bitmap currentBoard, bool isWhiteView)
+        public string? ScanForStateChanges(Bitmap currentBoard, bool isWhiteView, int brightnessThreshold = 18)
         {
             if (currentBoard == null) return null;
 
@@ -117,7 +117,7 @@ namespace ChessClicker
             }
 
             IReadOnlyList<(int Rank, int File)> changedSquares =
-                BoardBrightnessAnalyzer.FindChangedSquares(_previousGridBrightness, currentBrightness);
+                BoardBrightnessAnalyzer.FindChangedSquares(_previousGridBrightness, currentBrightness, brightnessThreshold);
 
             if (changedSquares.Count == 0)
             {
@@ -147,14 +147,6 @@ namespace ChessClicker
             if (!string.IsNullOrEmpty(candidates))
                 return candidates;
 
-            // Persistent highlights or multi-square changes are not a normal move.
-            if (_pendingStableFrames >= 4)
-            {
-                _previousGridBrightness = currentBrightness;
-                _pendingGridBrightness = null;
-                _pendingStableFrames = 0;
-            }
-
             return null;
         }
 
@@ -180,13 +172,6 @@ namespace ChessClicker
             }
 
             return true;
-        }
-
-        private string ConvertGridToAlgebraic(int file, int rank, bool isWhiteView)
-        {
-            char fileChar = isWhiteView ? (char)('a' + file) : (char)('h' - file);
-            int rankNum = isWhiteView ? (8 - rank) : (1 + rank);
-            return $"{fileChar}{rankNum}";
         }
 
         public bool DetectPlayerSideFromImage(Bitmap boardImage)

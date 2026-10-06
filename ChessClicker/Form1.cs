@@ -15,7 +15,6 @@ namespace ChessClicker
         private bool _isCalibrating = false;
         private bool _isWhiteView = true;
         private DesktopMouseHook? _desktopMouseHook;
-        private ChessClickerSettings _settings = ChessClickerSettings.Default;
 
         private readonly ChessGameController _controller;
         private Timer _timerGameLoop;
@@ -37,7 +36,6 @@ namespace ChessClicker
             // Ensure button text fields look descriptive on startup
             button2.Text = "Calibrate";
             button1.Text = "Play Move";
-            button3.Text = "Settings";
 
             LoadStartupConfig();
             InitializeGameLoopTimer();
@@ -227,7 +225,11 @@ namespace ChessClicker
 
         private string ScreenPointToSquare(Point point)
         {
-            return BoardMouseCoordinates.ScreenPointToSquare(point, _activeBoardBounds, _isWhiteView);
+            int screenFile = (point.X - _activeBoardBounds.X) * 8 / _activeBoardBounds.Width;
+            int screenRank = (point.Y - _activeBoardBounds.Y) * 8 / _activeBoardBounds.Height;
+            int file = _isWhiteView ? screenFile : 7 - screenFile;
+            int rank = _isWhiteView ? 8 - screenRank : 1 + screenRank;
+            return $"{(char)('a' + file)}{rank}";
         }
 
         // --- BUTTON TRIGGER: START / PAUSE SCAN TIMER LOOP ---
@@ -259,75 +261,6 @@ namespace ChessClicker
                 _timerGameLoop.Start();
                 ((Button)sender).Text = "Pause Scanner Loop";
                 Log("Live scanning active (5 FPS). Click a piece, then its destination to register a move.");
-            }
-        }
-
-        private void btnSettings_Click(object sender, EventArgs e)
-        {
-            using var settingsForm = new SettingsForm(_settings);
-            if (settingsForm.ShowDialog(this) != DialogResult.OK)
-                return;
-
-            _settings = settingsForm.Settings;
-            _controller.UpdateSettings(_settings);
-            Log($"[Settings] Move time: {_settings.MoveTimeMilliseconds} ms; Stockfish skill: {_settings.StockfishSkillLevel}/20.");
-        }
-
-        private void btnAutoCalibrate_Click(object sender, EventArgs e)
-        {
-            if (_activeBoardBounds.Width < 40 || _activeBoardBounds.Height < 40)
-            {
-                MessageBox.Show("Calibrate an approximate board area first.", "Calibration Required",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-
-            try
-            {
-                int paddingX = Math.Max(8, _activeBoardBounds.Width / 10);
-                int paddingY = Math.Max(8, _activeBoardBounds.Height / 10);
-                Rectangle searchBounds = Rectangle.Inflate(_activeBoardBounds, paddingX, paddingY);
-                searchBounds = Rectangle.Intersect(searchBounds, SystemInformation.VirtualScreen);
-                using Bitmap image = _controller.CaptureBoard(searchBounds);
-
-                int[,] grayscale = new int[image.Height, image.Width];
-                for (int y = 0; y < image.Height; y++)
-                {
-                    for (int x = 0; x < image.Width; x++)
-                    {
-                        Color color = image.GetPixel(x, y);
-                        grayscale[y, x] = (color.R + color.G + color.B) / 3;
-                    }
-                }
-
-                Rectangle initialBounds = new(
-                    _activeBoardBounds.X - searchBounds.X,
-                    _activeBoardBounds.Y - searchBounds.Y,
-                    _activeBoardBounds.Width,
-                    _activeBoardBounds.Height);
-                int adjustment = Math.Max(paddingX, paddingY);
-                Rectangle? fittedBounds = BoardGridCalibrator.FindBestBounds(grayscale, initialBounds, adjustment);
-                if (fittedBounds == null)
-                {
-                    Log("[Auto-calibration] Could not find a confident 8x8 grid. Existing calibration was kept.");
-                    return;
-                }
-
-                _activeBoardBounds = new Rectangle(
-                    fittedBounds.Value.X + searchBounds.X,
-                    fittedBounds.Value.Y + searchBounds.Y,
-                    fittedBounds.Value.Width,
-                    fittedBounds.Value.Height);
-                DisplayCroppedPreview();
-
-                string configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.txt");
-                File.WriteAllText(configPath,
-                    $"{_activeBoardBounds.X},{_activeBoardBounds.Y},{_activeBoardBounds.Width},{_activeBoardBounds.Height}");
-                Log($"[Auto-calibration] Fitted an 8x8 grid at X={_activeBoardBounds.X}, Y={_activeBoardBounds.Y}, width={_activeBoardBounds.Width}, height={_activeBoardBounds.Height}.");
-            }
-            catch (Exception ex)
-            {
-                Log($"[Auto-calibration error] {ex.Message}");
             }
         }
 

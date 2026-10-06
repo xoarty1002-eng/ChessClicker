@@ -35,6 +35,57 @@ namespace ChessClicker
             return bestScore >= MinimumGridEdgeContrast ? best : null;
         }
 
+        public static Rectangle? FindBestPosition(int[,] grayscale, Size boardSize, int positionStep = 4)
+        {
+            ArgumentNullException.ThrowIfNull(grayscale);
+            if (boardSize.Width < 40 || boardSize.Height < 40 ||
+                boardSize.Width > grayscale.GetLength(1) || boardSize.Height > grayscale.GetLength(0))
+                throw new ArgumentOutOfRangeException(nameof(boardSize), "The candidate board size must fit inside the calibration image.");
+            if (positionStep < 1)
+                throw new ArgumentOutOfRangeException(nameof(positionStep));
+
+            Rectangle? best = null;
+            double bestScore = 0;
+            int maxX = grayscale.GetLength(1) - boardSize.Width;
+            int maxY = grayscale.GetLength(0) - boardSize.Height;
+            for (int y = 0; y <= maxY; y += positionStep)
+            {
+                for (int x = 0; x <= maxX; x += positionStep)
+                {
+                    Rectangle candidate = new(x, y, boardSize.Width, boardSize.Height);
+                    double score = ScoreGridEdges(grayscale, candidate);
+                    if (score > bestScore)
+                    {
+                        best = candidate;
+                        bestScore = score;
+                    }
+                }
+            }
+
+            if (best is Rectangle coarseBest)
+            {
+                int startX = Math.Max(0, coarseBest.X - positionStep);
+                int endX = Math.Min(maxX, coarseBest.X + positionStep);
+                int startY = Math.Max(0, coarseBest.Y - positionStep);
+                int endY = Math.Min(maxY, coarseBest.Y + positionStep);
+                for (int y = startY; y <= endY; y++)
+                {
+                    for (int x = startX; x <= endX; x++)
+                    {
+                        Rectangle candidate = new(x, y, boardSize.Width, boardSize.Height);
+                        double score = ScoreGridEdges(grayscale, candidate);
+                        if (score > bestScore)
+                        {
+                            best = candidate;
+                            bestScore = score;
+                        }
+                    }
+                }
+            }
+
+            return bestScore >= MinimumGridEdgeContrast ? best : null;
+        }
+
         private static (Rectangle Bounds, double Score) FindBestHorizontalBounds(
             int[,] grayscale, Rectangle current, int adjustment, int step, double bestScore)
         {
