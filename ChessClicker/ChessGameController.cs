@@ -173,8 +173,13 @@ namespace ChessClicker
                 throw new ArgumentException("Enter a move in UCI notation, such as e2e4.", nameof(move));
 
             move = move.Trim().ToLowerInvariant();
-            if (move.Length < 4 || !IsLegalMove(move[..4]))
-                throw new ArgumentException($"Move {move} is not legal for {_board.Turn} to move.", nameof(move));
+            if (move.Length is not (4 or 5) ||
+                move[0] is < 'a' or > 'h' ||
+                move[2] is < 'a' or > 'h' ||
+                move[1] is < '1' or > '8' ||
+                move[3] is < '1' or > '8' ||
+                (move.Length == 5 && move[4] is not ('q' or 'r' or 'b' or 'n')))
+                throw new ArgumentException($"Move {move} must be valid UCI notation, such as e2e4 or e7e8q.", nameof(move));
 
             IsBusy = true;
             try

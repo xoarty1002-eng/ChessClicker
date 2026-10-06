@@ -22,6 +22,7 @@ namespace ChessClicker
         private bool _isCalibrating;
         private bool _isAutoCalibrating;
         private bool _isWhiteView = true;
+        private bool _orientationDetected;
         private bool _positionInitialized;
         private bool _startingPositionResetPending;
         private DateTime _lastAutoCalibrationAttempt;
@@ -39,6 +40,7 @@ namespace ChessClicker
             calibrateButton.Click += btnCalibrate_Click;
             playButton.Click += PlayButton_Click;
             settingsButton.Click += btnSettings_Click;
+            clickMoveButton.Click += ClickMoveButton_Click;
             KeyDown += Form1_KeyDown;
             moveInputTextBox.KeyDown += MoveInputTextBox_KeyDown;
 
@@ -111,7 +113,10 @@ namespace ChessClicker
             try
             {
                 using Bitmap currentFrame = _controller.CaptureBoard(_activeBoardBounds);
+                _isWhiteView = _controller.DetectWhiteView(currentFrame);
+                _orientationDetected = true;
                 SetPreview(currentFrame);
+                UpdateStatusLabel();
 
                 if (_controller.IsBusy || _isAutoCalibrating)
                     return;
@@ -132,6 +137,7 @@ namespace ChessClicker
                             _controller.ResetBoardTracking(recalibratedFrame);
                             SetPreview(recalibratedFrame);
                             _isWhiteView = _controller.DetectWhiteView(recalibratedFrame);
+                            _orientationDetected = true;
                             await _controller.ProcessBoardFrameAsync(
                                 recalibratedFrame, _activeBoardBounds, _isWhiteView);
                             return;
@@ -147,7 +153,6 @@ namespace ChessClicker
                     }
                 }
 
-                _isWhiteView = _controller.DetectWhiteView(currentFrame);
                 await _controller.ProcessBoardFrameAsync(currentFrame, _activeBoardBounds, _isWhiteView);
             }
             catch (Exception ex)
@@ -215,6 +220,8 @@ namespace ChessClicker
             try
             {
                 using Bitmap frame = _controller.CaptureBoard(_activeBoardBounds);
+                _isWhiteView = _controller.DetectWhiteView(frame);
+                _orientationDetected = true;
                 SetPreview(frame);
             }
             catch (Exception ex)
@@ -342,15 +349,17 @@ namespace ChessClicker
             try
             {
                 EnsureDesktopMouseHook();
+                using Bitmap baseline = _controller.CaptureBoard(_activeBoardBounds);
+                _isWhiteView = _controller.DetectWhiteView(baseline);
+                _orientationDetected = true;
                 if (!_positionInitialized || _startingPositionResetPending)
                 {
-                    _controller.ResetPosition(_settings.StartingPositionFen);
+                    _controller.ResetPosition(GetStartingFenForBottomSide(
+                        _settings.StartingPositionFen, _isWhiteView));
                     _positionInitialized = true;
                     _startingPositionResetPending = false;
                 }
 
-                using Bitmap baseline = _controller.CaptureBoard(_activeBoardBounds);
-                _isWhiteView = _controller.DetectWhiteView(baseline);
                 _controller.ResetBoardTracking(baseline);
                 SetPreview(baseline);
                 _lastAutoCalibrationAttempt = DateTime.UtcNow;
@@ -358,6 +367,7 @@ namespace ChessClicker
                 playButton.Text = "Stop (F2)";
                 UpdateStatusLabel();
                 Log($"[Play] Scanning continuously at {_settings.FramesPerSecond} FPS. Press F2 to stop.");
+                _ = _controller.RequestEngineMoveAsync(_activeBoardBounds, _isWhiteView);
             }
             catch (Exception ex)
             {
@@ -371,6 +381,16 @@ namespace ChessClicker
             playButton.Text = "Play (F2)";
             UpdateStatusLabel();
             Log("[Play] Stopped.");
+        }
+
+        private static string GetStartingFenForBottomSide(string fen, bool isWhiteView)
+        {
+            string[] fields = fen.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (fields.Length < 2)
+                throw new FormatException("The starting FEN must contain an active-color field.");
+
+            fields[1] = isWhiteView ? "w" : "b";
+            return string.Join(' ', fields);
         }
 
         private void Form1_KeyDown(object? sender, KeyEventArgs e)
@@ -409,6 +429,11 @@ namespace ChessClicker
             _ = SubmitTypedMoveAsync();
         }
 
+        private void ClickMoveButton_Click(object? sender, EventArgs e)
+        {
+            _ = SubmitTypedMoveAsync();
+        }
+
         private async Task SubmitTypedMoveAsync()
         {
             if (_controller.IsBusy)
@@ -425,6 +450,22 @@ namespace ChessClicker
 
             try
             {
+                if (!_orientationDetected)
+                {
+                    using Bitmap boardImage = _controller.CaptureBoard(_activeBoardBounds);
+                    _isWhiteView = _controller.DetectWhiteView(boardImage);
+                    _orientationDetected = true;
+                    UpdateStatusLabel();
+                }
+
+                if (!_positionInitialized || _startingPositionResetPending)
+                {
+                    _controller.ResetPosition(GetStartingFenForBottomSide(
+                        _settings.StartingPositionFen, _isWhiteView));
+                    _positionInitialized = true;
+                    _startingPositionResetPending = false;
+                }
+
                 await _controller.ExecuteTypedMoveAsync(
                     moveInputTextBox.Text, _activeBoardBounds, _isWhiteView);
             }
@@ -478,16 +519,14 @@ namespace ChessClicker
             UpdateStatusLabel();
             if (startingPositionChanged)
             {
+                _startingPositionResetPending = true;
                 if (isPlaying)
                 {
-                    _startingPositionResetPending = true;
                     Log("[Settings] New FEN will be loaded when Play is started again.");
                 }
                 else
                 {
-                    _controller.ResetPosition(_settings.StartingPositionFen);
-                    _positionInitialized = true;
-                    _startingPositionResetPending = false;
+                    Log("[Settings] The new FEN will load when Play starts, with the detected bottom-side color to move.");
                 }
             }
 
@@ -514,7 +553,10 @@ namespace ChessClicker
             string state = _isCalibrating
                 ? "calibrating"
                 : _timerGameLoop.Enabled ? "playing" : "stopped";
-            statusLabel.Text = $"{_settings.FramesPerSecond} FPS | {state}";
+            string bottomSide = !_orientationDetected
+                ? "Bottom: unknown"
+                : $"Bottom: {(_isWhiteView ? "White" : "Black")}";
+            statusLabel.Text = $"{bottomSide} | {_settings.FramesPerSecond} FPS | {state}";
         }
 
         private static string GetBoardBoundsPath() =>
