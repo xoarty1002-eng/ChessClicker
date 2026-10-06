@@ -81,15 +81,9 @@ namespace ChessClicker
 
         public void ExecuteMove(string uciMove, Rectangle boardBounds, bool isWhiteView)
         {
-            if (uciMove == null || (uciMove.Length != 4 && uciMove.Length != 5))
-                throw new ArgumentException("A move must be in UCI notation, such as e2e4 or e7e8q.", nameof(uciMove));
-
-            string fromSquare = uciMove.Substring(0, 2);
+            uciMove = ChessMoveNotation.Normalize(uciMove);
+            string fromSquare = uciMove[..2];
             string toSquare = uciMove.Substring(2, 2);
-            BoardMouseCoordinates.ValidateSquare(fromSquare, nameof(uciMove));
-            BoardMouseCoordinates.ValidateSquare(toSquare, nameof(uciMove));
-            if (uciMove.Length == 5 && "qrbn".IndexOf(uciMove[4]) < 0)
-                throw new ArgumentException("A promotion suffix must be q, r, b, or n.", nameof(uciMove));
 
             Point from = BoardMouseCoordinates.SquareCenter(fromSquare, boardBounds, isWhiteView);
             Point to = BoardMouseCoordinates.SquareCenter(toSquare, boardBounds, isWhiteView);

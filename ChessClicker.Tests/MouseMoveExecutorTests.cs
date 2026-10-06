@@ -63,6 +63,29 @@ public sealed class MouseMoveExecutorTests
     }
 
     [Fact]
+    public void ExecuteTypedBlackPerspectiveMoveClicksCorrectSquaresFromHyphenatedInput()
+    {
+        var mouse = new FakeMouseInput { Position = new Point(17, 29) };
+        mouse.Events.Clear();
+        var executor = new MouseMoveExecutor(mouse, _ => { });
+
+        executor.ExecuteMove("a8-a6", BoardBounds, isWhiteView: false);
+
+        Assert.Equal(
+            new[]
+            {
+                "position:850,950",
+                "down",
+                "up",
+                "position:850,750",
+                "down",
+                "up",
+                "position:17,29"
+            },
+            mouse.Events);
+    }
+
+    [Fact]
     public void ExecuteMoveRestoresCursorWhenInputFails()
     {
         var mouse = new FakeMouseInput
@@ -118,6 +141,27 @@ public sealed class MouseMoveExecutorTests
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             BoardMouseCoordinates.ScreenPointToSquare(new Point(900, 300), BoardBounds, true));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void EverySquareCenterMapsBackToTheSameSquare(bool whiteView)
+    {
+        Rectangle unevenBoardBounds = new(17, 31, 803, 797);
+
+        for (int rank = 1; rank <= 8; rank++)
+        {
+            for (char file = 'a'; file <= 'h'; file++)
+            {
+                string square = $"{file}{rank}";
+                Point center = BoardMouseCoordinates.SquareCenter(
+                    square, unevenBoardBounds, whiteView);
+
+                Assert.Equal(square, BoardMouseCoordinates.ScreenPointToSquare(
+                    center, unevenBoardBounds, whiteView));
+            }
+        }
     }
 
     private sealed class FakeMouseInput : IMouseInput

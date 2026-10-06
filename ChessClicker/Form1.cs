@@ -113,10 +113,8 @@ namespace ChessClicker
             try
             {
                 using Bitmap currentFrame = _controller.CaptureBoard(_activeBoardBounds);
-                _isWhiteView = _controller.DetectWhiteView(currentFrame);
-                _orientationDetected = true;
+                EnsureBoardOrientationDetected(currentFrame);
                 SetPreview(currentFrame);
-                UpdateStatusLabel();
 
                 if (_controller.IsBusy || _isAutoCalibrating)
                     return;
@@ -136,8 +134,6 @@ namespace ChessClicker
                             using Bitmap recalibratedFrame = _controller.CaptureBoard(_activeBoardBounds);
                             _controller.ResetBoardTracking(recalibratedFrame);
                             SetPreview(recalibratedFrame);
-                            _isWhiteView = _controller.DetectWhiteView(recalibratedFrame);
-                            _orientationDetected = true;
                             await _controller.ProcessBoardFrameAsync(
                                 recalibratedFrame, _activeBoardBounds, _isWhiteView);
                             return;
@@ -220,8 +216,7 @@ namespace ChessClicker
             try
             {
                 using Bitmap frame = _controller.CaptureBoard(_activeBoardBounds);
-                _isWhiteView = _controller.DetectWhiteView(frame);
-                _orientationDetected = true;
+                DetectBoardOrientation(frame);
                 SetPreview(frame);
             }
             catch (Exception ex)
@@ -280,11 +275,9 @@ namespace ChessClicker
                 !_activeBoardBounds.Contains(point))
                 return;
 
-            int screenFile = (point.X - _activeBoardBounds.X) * 8 / _activeBoardBounds.Width;
-            int screenRank = (point.Y - _activeBoardBounds.Y) * 8 / _activeBoardBounds.Height;
-            int file = _isWhiteView ? screenFile : 7 - screenFile;
-            int rank = _isWhiteView ? 8 - screenRank : 1 + screenRank;
-            _controller.RegisterSquareClick($"{(char)('a' + file)}{rank}", _activeBoardBounds, _isWhiteView);
+            string square = BoardMouseCoordinates.ScreenPointToSquare(
+                point, _activeBoardBounds, _isWhiteView);
+            _controller.RegisterSquareClick(square, _activeBoardBounds, _isWhiteView);
         }
 
         private void OnCalibrationClick(Point point)
@@ -350,8 +343,7 @@ namespace ChessClicker
             {
                 EnsureDesktopMouseHook();
                 using Bitmap baseline = _controller.CaptureBoard(_activeBoardBounds);
-                _isWhiteView = _controller.DetectWhiteView(baseline);
-                _orientationDetected = true;
+                DetectBoardOrientation(baseline);
                 if (!_positionInitialized || _startingPositionResetPending)
                 {
                     _controller.ResetPosition(GetStartingFenForBottomSide(
@@ -381,6 +373,19 @@ namespace ChessClicker
             playButton.Text = "Play (F2)";
             UpdateStatusLabel();
             Log("[Play] Stopped.");
+        }
+
+        private void EnsureBoardOrientationDetected(Bitmap boardImage)
+        {
+            if (!_orientationDetected)
+                DetectBoardOrientation(boardImage);
+        }
+
+        private void DetectBoardOrientation(Bitmap boardImage)
+        {
+            _isWhiteView = _controller.DetectWhiteView(boardImage);
+            _orientationDetected = true;
+            UpdateStatusLabel();
         }
 
         private static string GetStartingFenForBottomSide(string fen, bool isWhiteView)
@@ -453,9 +458,7 @@ namespace ChessClicker
                 if (!_orientationDetected)
                 {
                     using Bitmap boardImage = _controller.CaptureBoard(_activeBoardBounds);
-                    _isWhiteView = _controller.DetectWhiteView(boardImage);
-                    _orientationDetected = true;
-                    UpdateStatusLabel();
+                    DetectBoardOrientation(boardImage);
                 }
 
                 if (!_positionInitialized || _startingPositionResetPending)

@@ -169,17 +169,7 @@ namespace ChessClicker
                     $"[Move awaiting confirmation] {_moveConfirmation.PendingMove} has not yet been observed on the board.");
                 return;
             }
-            if (string.IsNullOrWhiteSpace(move))
-                throw new ArgumentException("Enter a move in UCI notation, such as e2e4.", nameof(move));
-
-            move = move.Trim().ToLowerInvariant();
-            if (move.Length is not (4 or 5) ||
-                move[0] is < 'a' or > 'h' ||
-                move[2] is < 'a' or > 'h' ||
-                move[1] is < '1' or > '8' ||
-                move[3] is < '1' or > '8' ||
-                (move.Length == 5 && move[4] is not ('q' or 'r' or 'b' or 'n')))
-                throw new ArgumentException($"Move {move} must be valid UCI notation, such as e2e4 or e7e8q.", nameof(move));
+            move = ChessMoveNotation.Normalize(move);
 
             IsBusy = true;
             try

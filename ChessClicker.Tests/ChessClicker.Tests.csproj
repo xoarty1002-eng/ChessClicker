@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <Compile Include="../ChessClicker/BoardMouseCoordinates.cs" Link="BoardMouseCoordinates.cs" />
+    <Compile Include="../ChessClicker/ChessMoveNotation.cs" Link="ChessMoveNotation.cs" />
     <Compile Include="../ChessClicker/BoardOrientationDetector.cs" Link="BoardOrientationDetector.cs" />
     <Compile Include="../ChessClicker/MoveConfirmation.cs" Link="MoveConfirmation.cs" />
     <Compile Include="../ChessClicker/BoardBrightnessAnalyzer.cs" Link="BoardBrightnessAnalyzer.cs" />
