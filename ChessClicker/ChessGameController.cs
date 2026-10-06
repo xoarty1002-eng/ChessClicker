@@ -17,6 +17,7 @@ namespace ChessClicker
 
         private static readonly TimeSpan MoveConfirmationTimeout = TimeSpan.FromSeconds(8);
         private static readonly TimeSpan MoveConfirmationPollInterval = TimeSpan.FromMilliseconds(200);
+        private static readonly TimeSpan BoardStabilityTimeout = TimeSpan.FromSeconds(8);
         private int _engineTurnCount;
 
         public event Action<string>? StatusChanged;
@@ -224,6 +225,14 @@ namespace ChessClicker
 
         private async Task SendMoveAndWaitForConfirmationAsync(string move, Rectangle bounds, bool isWhiteView)
         {
+            StatusChanged?.Invoke("[Board verification] Waiting for three stable captures before sending the move...");
+            if (!await WaitForStableBoardAsync(bounds))
+            {
+                StatusChanged?.Invoke(
+                    $"[Move blocked] The board did not remain stable for three captures within {BoardStabilityTimeout.TotalSeconds:0} seconds. No move was sent.");
+                return;
+            }
+
             using Bitmap baseline = CaptureBoard(bounds);
             _scanner.ResetStateTracking(baseline);
             _moveConfirmation.Expect(move);
@@ -254,6 +263,24 @@ namespace ChessClicker
             _scanner.ResetStateTracking(baseline);
             StatusChanged?.Invoke(
                 $"[Move not confirmed] {move} was sent, but no matching board change appeared within {MoveConfirmationTimeout.TotalSeconds:0} seconds. The tracked position was not advanced; scanning remains armed to detect a delayed board update.");
+        }
+
+        private async Task<bool> WaitForStableBoardAsync(Rectangle bounds)
+        {
+            var stabilityTracker = new BoardStabilityTracker(requiredStableFrames: 3);
+            DateTime deadline = DateTime.UtcNow + BoardStabilityTimeout;
+            int intervalMilliseconds = Math.Max(1, 1000 / _settings.FramesPerSecond);
+
+            while (DateTime.UtcNow < deadline)
+            {
+                using Bitmap currentBoard = CaptureBoard(bounds);
+                if (stabilityTracker.AddFrame(_scanner.ExtractGridBrightness(currentBoard)))
+                    return true;
+
+                await Task.Delay(intervalMilliseconds);
+            }
+
+            return false;
         }
 
         private int GetSkillLevelForNextTurn()

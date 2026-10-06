@@ -8,20 +8,22 @@ ChessClicker is a Windows desktop prototype that samples a calibrated chessboard
 - A local chessboard visible on screen and permission to control the desktop mouse.
 - Internet access the first time Stockfish is installed. The current downloader looks for a Windows x64 Stockfish release.
 
-The application uses Windows Forms, GDI screen capture, and Win32 mouse hooks. It cannot run as a desktop app on Linux. Linux can cross-build the Windows target, but that does not make Windows Forms or the mouse hook executable on Linux:
+The application uses Windows Forms, GDI screen capture, and Win32 mouse hooks. It cannot run as a desktop app on Linux. Linux can cross-build the Windows target in compatible mode, but that does not make Windows Forms or the mouse hook executable on Linux:
 
 ```sh
-dotnet build ChessClicker.slnx -p:EnableWindowsTargeting=true
+dotnet build ChessClicker.slnx
 ```
+
+The project includes the Windows-targeting compatibility flag required for Linux cross-builds, so a normal `dotnet build` or `dotnet test` invocation can succeed in a CI or dev container that is not running Windows.
 
 ## Run
 
 1. Build and start ChessClicker on Windows.
 2. Open a local chessboard or a site's analysis board. Do not use engine assistance in a live rated or casual game; follow the site's fair-play rules.
-3. Choose **Manual Calibrate: select corners**, then click the chessboard's outer top-left and bottom-right corners in that order. **Auto-calibrate full screen** searches the full virtual desktop for an 8×8 grid, using the saved board size when available or a screen-size estimate otherwise. Check the preview and recalibrate manually if the fit is wrong.
-4. Click **Start Scanning** to see a live board preview with an 8×8 debug grid and coordinate labels. The tracked position and timestamped log are displayed separately.
-5. Use **Settings** to choose Stockfish thinking time (100–10,000 ms), skill level (0–20), preview/scanning rate (1–30 FPS), brightness-change sensitivity, and the color theme for the debug grid and coordinate labels. Optionally randomize the Stockfish skill from 0–20 every turn or every N engine turns.
-6. To register a move, click its source square and then its destination square, or enter UCI notation (for example `e2e4`) in the move field and press Enter or **Click Typed Move**. **Get Stockfish Move** asks for a move from the tracked position and clicks the corresponding squares. The app waits up to eight seconds for the captured board to show the move before updating its tracked position. If confirmation times out, it restores the pre-move scan baseline so a delayed visual update can still be detected on a later frame.
+3. Calibrate either by clicking **Auto-find board grid** (the app hides its window and searches the desktop using the last known board size, or a screen-size estimate) or **Manual Calibrate: select corners** (click the outer top-left and bottom-right points, in that order). While selecting corners, use **Stop Calibration** to cancel without replacing the previous calibration. Inspect the preview after automatic calibration and use the manual method if the detected crop is wrong.
+4. Click **Start Scanning** to see a live board preview with an 8×8 debug grid and coordinate labels. The preview status displays the configured FPS and whether scanning is running, stopped, or calibrating. The tracked position and timestamped log are displayed separately.
+5. Use **Settings** to choose Stockfish thinking time (100–10,000 ms), skill level (0–20), preview/scanning rate (1–30 FPS), brightness-change sensitivity, and the color theme for the debug grid and coordinate labels. Settings, including FPS, are saved to the per-user `settings.json` file and loaded on startup. Optionally randomize the Stockfish skill from 0–20 every turn or every N engine turns.
+6. To register a move, click its source square and then its destination square, or enter UCI notation (for example `e2e4`) in the move field and press Enter or **Click Typed Move**. **Get Stockfish Move** asks for a move from the tracked position and clicks the corresponding squares. Before sending any move, the app requires three consecutive stable board captures (allowing small brightness noise); if the board keeps changing for eight seconds, the move is blocked and not sent. After sending, the app waits up to eight seconds for the captured board to show the move before updating its tracked position.
 
 Calibration, screen capture, and mouse automation require a visible desktop. They do not work against a browser page fetched in the background.
 

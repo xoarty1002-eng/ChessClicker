@@ -12,6 +12,7 @@ namespace ChessClicker
         private Button scannerButton = null!;
         private Button calibrateButton = null!;
         private Button autoCalibrateButton = null!;
+        private Button stopCalibrationButton = null!;
         private Button settingsButton = null!;
         private Button executeTypedMoveButton = null!;
         private Label fpsLabel = null!;
@@ -36,6 +37,7 @@ namespace ChessClicker
             scannerButton = new Button();
             calibrateButton = new Button();
             autoCalibrateButton = new Button();
+            stopCalibrationButton = new Button();
             settingsButton = new Button();
             executeTypedMoveButton = new Button();
             fpsLabel = new Label();
@@ -70,7 +72,9 @@ namespace ChessClicker
             fpsLabel.Margin = new Padding(4, 4, 4, 12);
 
             ConfigureButton(calibrateButton, "Manual Calibrate: select corners");
-            ConfigureButton(autoCalibrateButton, "Auto-calibrate full screen");
+            ConfigureButton(autoCalibrateButton, "Auto-find board grid");
+            ConfigureButton(stopCalibrationButton, "Stop Calibration");
+            stopCalibrationButton.Enabled = false;
             ConfigureButton(scannerButton, "Start Scanning");
             ConfigureButton(playMoveButton, "Get Stockfish Move");
             ConfigureButton(settingsButton, "Settings");
@@ -104,6 +108,7 @@ namespace ChessClicker
             rightPanel.Controls.Add(fpsLabel);
             rightPanel.Controls.Add(calibrateButton);
             rightPanel.Controls.Add(autoCalibrateButton);
+            rightPanel.Controls.Add(stopCalibrationButton);
             rightPanel.Controls.Add(scannerButton);
             rightPanel.Controls.Add(playMoveButton);
             rightPanel.Controls.Add(settingsButton);

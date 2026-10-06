@@ -1,4 +1,5 @@
 using ChessClicker;
+using System.IO;
 using Xunit;
 
 namespace ChessClicker.Tests;
@@ -46,5 +47,32 @@ public sealed class ChessClickerSettingsTests
     {
         Assert.ThrowsAny<ArgumentException>(() => new ChessClickerSettings(
             1000, 20, framesPerSecond, brightnessThreshold, theme, false, randomSkillInterval));
+    }
+
+    [Fact]
+    public void SavesAndLoadsConfiguredPreviewRate()
+    {
+        string path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "settings.json");
+        var expected = new ChessClickerSettings(1500, 14, 12, 22, "Blue", true, 3);
+
+        try
+        {
+            expected.SaveToFile(path);
+            ChessClickerSettings actual = ChessClickerSettings.LoadFromFile(path);
+
+            Assert.Equal(expected.MoveTimeMilliseconds, actual.MoveTimeMilliseconds);
+            Assert.Equal(expected.StockfishSkillLevel, actual.StockfishSkillLevel);
+            Assert.Equal(expected.FramesPerSecond, actual.FramesPerSecond);
+            Assert.Equal(expected.BrightnessThreshold, actual.BrightnessThreshold);
+            Assert.Equal(expected.BoardTheme, actual.BoardTheme);
+            Assert.Equal(expected.RandomizeStockfishSkill, actual.RandomizeStockfishSkill);
+            Assert.Equal(expected.RandomSkillIntervalTurns, actual.RandomSkillIntervalTurns);
+        }
+        finally
+        {
+            string? directory = Path.GetDirectoryName(path);
+            if (directory != null && Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
     }
 }

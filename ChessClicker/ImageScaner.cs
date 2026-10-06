@@ -100,6 +100,39 @@ namespace ChessClicker
             return brightnessMatrix;
         }
 
+        public int[,] ExtractGrayscale(Bitmap image)
+        {
+            ArgumentNullException.ThrowIfNull(image);
+            var grayscale = new int[image.Height, image.Width];
+            BitmapData bitmapData = image.LockBits(
+                new Rectangle(0, 0, image.Width, image.Height),
+                ImageLockMode.ReadOnly, PixelFormat.Format32bppRgb);
+            try
+            {
+                int rowBytes = image.Width * 4;
+                byte[] row = new byte[rowBytes];
+                for (int y = 0; y < image.Height; y++)
+                {
+                    IntPtr rowStart = IntPtr.Add(bitmapData.Scan0, y * bitmapData.Stride);
+                    Marshal.Copy(rowStart, row, 0, rowBytes);
+                    for (int x = 0; x < image.Width; x++)
+                    {
+                        int offset = x * 4;
+                        int blue = row[offset];
+                        int green = row[offset + 1];
+                        int red = row[offset + 2];
+                        grayscale[y, x] = (red * 299 + green * 587 + blue * 114) / 1000;
+                    }
+                }
+            }
+            finally
+            {
+                image.UnlockBits(bitmapData);
+            }
+
+            return grayscale;
+        }
+
         /// <summary>
         /// Compares the current square brightness states with the previous baseline to track state modifications.
         /// </summary>

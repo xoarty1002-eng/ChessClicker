@@ -1,4 +1,7 @@
 using System;
+using System.IO;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace ChessClicker
 {
@@ -12,6 +15,7 @@ namespace ChessClicker
         public bool RandomizeStockfishSkill { get; }
         public int RandomSkillIntervalTurns { get; }
 
+        [JsonConstructor]
         public ChessClickerSettings(
             int moveTimeMilliseconds,
             int stockfishSkillLevel,
@@ -44,5 +48,22 @@ namespace ChessClicker
         }
 
         public static ChessClickerSettings Default { get; } = new(1000, 20);
+
+        public static ChessClickerSettings LoadFromFile(string path)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(path);
+            using FileStream stream = File.OpenRead(path);
+            return JsonSerializer.Deserialize<ChessClickerSettings>(stream)
+                ?? throw new InvalidDataException("The settings file does not contain valid settings.");
+        }
+
+        public void SaveToFile(string path)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(path);
+            string fullPath = Path.GetFullPath(path);
+            Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+            using FileStream stream = File.Create(fullPath);
+            JsonSerializer.Serialize(stream, this, new JsonSerializerOptions { WriteIndented = true });
+        }
     }
 }
