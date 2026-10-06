@@ -14,6 +14,7 @@ namespace ChessClicker
         public string BoardTheme { get; }
         public bool RandomizeStockfishSkill { get; }
         public int RandomSkillIntervalTurns { get; }
+        public bool CalibrateWhilePlaying { get; }
 
         [JsonConstructor]
         public ChessClickerSettings(
@@ -23,7 +24,8 @@ namespace ChessClicker
             int brightnessThreshold = 18,
             string boardTheme = "Green",
             bool randomizeStockfishSkill = false,
-            int randomSkillIntervalTurns = 1)
+            int randomSkillIntervalTurns = 1,
+            bool calibrateWhilePlaying = false)
         {
             if (moveTimeMilliseconds < 100 || moveTimeMilliseconds > 10000)
                 throw new ArgumentOutOfRangeException(nameof(moveTimeMilliseconds), "Move time must be between 100 and 10000 milliseconds.");
@@ -45,6 +47,7 @@ namespace ChessClicker
             BoardTheme = boardTheme;
             RandomizeStockfishSkill = randomizeStockfishSkill;
             RandomSkillIntervalTurns = randomSkillIntervalTurns;
+            CalibrateWhilePlaying = calibrateWhilePlaying;
         }
 
         public static ChessClickerSettings Default { get; } = new(1000, 20);

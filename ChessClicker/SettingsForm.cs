@@ -12,6 +12,7 @@ namespace ChessClicker
         private readonly NumericUpDown _brightnessThresholdInput;
         private readonly ComboBox _boardThemeInput;
         private readonly CheckBox _randomSkillInput;
+        private readonly CheckBox _calibrateWhilePlayingInput;
         private readonly NumericUpDown _randomSkillIntervalInput;
 
         public ChessClickerSettings Settings => new(
@@ -21,7 +22,8 @@ namespace ChessClicker
             (int)_brightnessThresholdInput.Value,
             (string)_boardThemeInput.SelectedItem!,
             _randomSkillInput.Checked,
-            (int)_randomSkillIntervalInput.Value);
+            (int)_randomSkillIntervalInput.Value,
+            _calibrateWhilePlayingInput.Checked);
 
         public SettingsForm(ChessClickerSettings settings)
         {
@@ -33,18 +35,18 @@ namespace ChessClicker
             MaximizeBox = false;
             MinimizeBox = false;
             ShowInTaskbar = false;
-            ClientSize = new Size(470, 380);
+            ClientSize = new Size(470, 420);
 
             var layout = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 2,
-                RowCount = 8,
+                RowCount = 9,
                 Padding = new Padding(12)
             };
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 62));
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38));
-            for (int row = 0; row < 6; row++)
+            for (int row = 0; row < 7; row++)
                 layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
@@ -79,6 +81,15 @@ namespace ChessClicker
             AddSetting(layout, "Board theme", _boardThemeInput, 4);
             layout.Controls.Add(_randomSkillInput, 0, 5);
             layout.Controls.Add(_randomSkillIntervalInput, 1, 5);
+            _calibrateWhilePlayingInput = new CheckBox
+            {
+                Text = "Calibrate board crop while playing",
+                Checked = settings.CalibrateWhilePlaying,
+                AutoSize = true,
+                Anchor = AnchorStyles.Left
+            };
+            layout.Controls.Add(_calibrateWhilePlayingInput, 0, 6);
+            layout.SetColumnSpan(_calibrateWhilePlayingInput, 2);
 
             var note = new Label
             {
@@ -86,7 +97,7 @@ namespace ChessClicker
                 AutoSize = true,
                 Dock = DockStyle.Fill
             };
-            layout.Controls.Add(note, 0, 6);
+            layout.Controls.Add(note, 0, 7);
             layout.SetColumnSpan(note, 2);
 
             var buttons = new FlowLayoutPanel
@@ -98,7 +109,7 @@ namespace ChessClicker
             var cancelButton = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
             buttons.Controls.Add(saveButton);
             buttons.Controls.Add(cancelButton);
-            layout.Controls.Add(buttons, 0, 7);
+            layout.Controls.Add(buttons, 0, 8);
             layout.SetColumnSpan(buttons, 2);
 
             Controls.Add(layout);

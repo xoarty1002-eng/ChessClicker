@@ -32,6 +32,7 @@ public sealed class ChessClickerSettingsTests
         Assert.Equal("Green", ChessClickerSettings.Default.BoardTheme);
         Assert.False(ChessClickerSettings.Default.RandomizeStockfishSkill);
         Assert.Equal(1, ChessClickerSettings.Default.RandomSkillIntervalTurns);
+        Assert.False(ChessClickerSettings.Default.CalibrateWhilePlaying);
     }
 
     [Theory]
@@ -53,7 +54,7 @@ public sealed class ChessClickerSettingsTests
     public void SavesAndLoadsConfiguredPreviewRate()
     {
         string path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "settings.json");
-        var expected = new ChessClickerSettings(1500, 14, 12, 22, "Blue", true, 3);
+        var expected = new ChessClickerSettings(1500, 14, 12, 22, "Blue", true, 3, true);
 
         try
         {
@@ -67,6 +68,7 @@ public sealed class ChessClickerSettingsTests
             Assert.Equal(expected.BoardTheme, actual.BoardTheme);
             Assert.Equal(expected.RandomizeStockfishSkill, actual.RandomizeStockfishSkill);
             Assert.Equal(expected.RandomSkillIntervalTurns, actual.RandomSkillIntervalTurns);
+            Assert.Equal(expected.CalibrateWhilePlaying, actual.CalibrateWhilePlaying);
         }
         finally
         {

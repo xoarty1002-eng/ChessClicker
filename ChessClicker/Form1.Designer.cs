@@ -5,17 +5,11 @@ namespace ChessClicker
     {
         private System.ComponentModel.IContainer? components = null;
         private PictureBox previewPictureBox = null!;
-        private TextBox positionTextBox = null!;
         private TextBox logTextBox = null!;
-        private TextBox moveInputTextBox = null!;
-        private Button playMoveButton = null!;
-        private Button scannerButton = null!;
+        private Button playButton = null!;
         private Button calibrateButton = null!;
-        private Button autoCalibrateButton = null!;
-        private Button stopCalibrationButton = null!;
         private Button settingsButton = null!;
-        private Button executeTypedMoveButton = null!;
-        private Label fpsLabel = null!;
+        private Label statusLabel = null!;
 
         protected override void Dispose(bool disposing)
         {
@@ -30,117 +24,76 @@ namespace ChessClicker
         private void InitializeComponent()
         {
             previewPictureBox = new PictureBox();
-            positionTextBox = new TextBox();
             logTextBox = new TextBox();
-            moveInputTextBox = new TextBox();
-            playMoveButton = new Button();
-            scannerButton = new Button();
+            playButton = new Button();
             calibrateButton = new Button();
-            autoCalibrateButton = new Button();
-            stopCalibrationButton = new Button();
             settingsButton = new Button();
-            executeTypedMoveButton = new Button();
-            fpsLabel = new Label();
+            statusLabel = new Label();
             var root = new TableLayoutPanel();
-            var rightPanel = new FlowLayoutPanel();
-            var commandLayout = new TableLayoutPanel();
+            var footer = new TableLayoutPanel();
+            var buttons = new FlowLayoutPanel();
+
             ((System.ComponentModel.ISupportInitialize)previewPictureBox).BeginInit();
             SuspendLayout();
 
-            root.ColumnCount = 2;
-            root.RowCount = 2;
             root.Dock = DockStyle.Fill;
             root.Padding = new Padding(8);
-            root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 68));
-            root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 32));
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 72));
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 28));
+            root.ColumnCount = 1;
+            root.RowCount = 2;
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 76));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 24));
 
             previewPictureBox.Dock = DockStyle.Fill;
             previewPictureBox.BackColor = Color.FromArgb(32, 32, 32);
             previewPictureBox.SizeMode = PictureBoxSizeMode.Zoom;
-            previewPictureBox.Margin = new Padding(0, 0, 8, 8);
+            previewPictureBox.Margin = new Padding(0, 0, 0, 6);
 
-            rightPanel.Dock = DockStyle.Fill;
-            rightPanel.FlowDirection = FlowDirection.TopDown;
-            rightPanel.WrapContents = false;
-            rightPanel.AutoScroll = true;
-            rightPanel.Padding = new Padding(4);
+            footer.Dock = DockStyle.Fill;
+            footer.ColumnCount = 1;
+            footer.RowCount = 2;
+            footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+            footer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-            fpsLabel.Text = "Preview: stopped";
-            fpsLabel.AutoSize = true;
-            fpsLabel.Margin = new Padding(4, 4, 4, 12);
+            buttons.Dock = DockStyle.Fill;
+            buttons.FlowDirection = FlowDirection.LeftToRight;
+            buttons.WrapContents = false;
+            buttons.Padding = new Padding(0);
 
-            ConfigureButton(calibrateButton, "Manual Calibrate: select corners");
-            ConfigureButton(autoCalibrateButton, "Auto-find board grid");
-            ConfigureButton(stopCalibrationButton, "Stop Calibration");
-            stopCalibrationButton.Enabled = false;
-            ConfigureButton(scannerButton, "Start Scanning");
-            ConfigureButton(playMoveButton, "Get Stockfish Move");
+            ConfigureButton(calibrateButton, "Manual calibrate");
+            ConfigureButton(playButton, "Play (F2)");
             ConfigureButton(settingsButton, "Settings");
-            ConfigureButton(executeTypedMoveButton, "Click Typed Move");
+            calibrateButton.Width = 150;
+            playButton.Width = 130;
+            settingsButton.Width = 110;
+            buttons.Controls.Add(calibrateButton);
+            buttons.Controls.Add(playButton);
+            buttons.Controls.Add(settingsButton);
 
-            var moveLabel = new Label
-            {
-                Text = "Move in UCI notation (for example e2e4):",
-                AutoSize = true,
-                Margin = new Padding(4, 14, 4, 2)
-            };
-            moveInputTextBox.Width = 300;
-            moveInputTextBox.PlaceholderText = "e2e4";
-            moveInputTextBox.Margin = new Padding(4, 2, 4, 2);
-            executeTypedMoveButton.Width = 300;
+            statusLabel.Dock = DockStyle.Fill;
+            statusLabel.TextAlign = ContentAlignment.MiddleRight;
+            statusLabel.AutoEllipsis = true;
+            statusLabel.Text = "Preview: 5 FPS (stopped)";
+            buttons.Controls.Add(statusLabel);
 
-            var positionLabel = new Label
-            {
-                Text = "Tracked position",
-                AutoSize = true,
-                Margin = new Padding(4, 14, 4, 2)
-            };
-            positionTextBox.Multiline = true;
-            positionTextBox.ReadOnly = true;
-            positionTextBox.ScrollBars = ScrollBars.Vertical;
-            positionTextBox.WordWrap = false;
-            positionTextBox.Width = 300;
-            positionTextBox.Height = 180;
-            positionTextBox.Margin = new Padding(4, 2, 4, 4);
-
-            rightPanel.Controls.Add(fpsLabel);
-            rightPanel.Controls.Add(calibrateButton);
-            rightPanel.Controls.Add(autoCalibrateButton);
-            rightPanel.Controls.Add(stopCalibrationButton);
-            rightPanel.Controls.Add(scannerButton);
-            rightPanel.Controls.Add(playMoveButton);
-            rightPanel.Controls.Add(settingsButton);
-            rightPanel.Controls.Add(moveLabel);
-            rightPanel.Controls.Add(moveInputTextBox);
-            rightPanel.Controls.Add(executeTypedMoveButton);
-            rightPanel.Controls.Add(positionLabel);
-            rightPanel.Controls.Add(positionTextBox);
-
-            commandLayout.Dock = DockStyle.Fill;
-            commandLayout.ColumnCount = 1;
-            commandLayout.RowCount = 1;
-            commandLayout.Padding = new Padding(4);
-            commandLayout.Controls.Add(logTextBox, 0, 0);
             logTextBox.Dock = DockStyle.Fill;
             logTextBox.Multiline = true;
             logTextBox.ReadOnly = true;
             logTextBox.ScrollBars = ScrollBars.Vertical;
-            logTextBox.WordWrap = false;
+            logTextBox.WordWrap = true;
 
+            footer.Controls.Add(buttons, 0, 0);
+            footer.Controls.Add(logTextBox, 0, 1);
             root.Controls.Add(previewPictureBox, 0, 0);
-            root.Controls.Add(rightPanel, 1, 0);
-            root.Controls.Add(commandLayout, 0, 1);
-            root.SetColumnSpan(commandLayout, 2);
+            root.Controls.Add(footer, 0, 1);
 
             Controls.Add(root);
             AutoScaleDimensions = new SizeF(8F, 20F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(1180, 820);
-            MinimumSize = new Size(950, 680);
+            ClientSize = new Size(820, 620);
+            MinimumSize = new Size(680, 500);
+            KeyPreview = true;
             Name = "Form1";
-            Text = "ChessClicker - Private Analysis";
+            Text = "ChessClicker";
             ((System.ComponentModel.ISupportInitialize)previewPictureBox).EndInit();
             ResumeLayout(false);
         }
@@ -148,9 +101,8 @@ namespace ChessClicker
         private static void ConfigureButton(Button button, string text)
         {
             button.Text = text;
-            button.Width = 300;
-            button.Height = 38;
-            button.Margin = new Padding(4);
+            button.Height = 34;
+            button.Margin = new Padding(3, 2, 8, 2);
             button.UseVisualStyleBackColor = true;
         }
     }

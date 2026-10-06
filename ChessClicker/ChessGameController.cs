@@ -36,6 +36,11 @@ namespace ChessClicker
             return _scanner.CaptureBoardRegion(bounds);
         }
 
+        public void ResetBoardTracking(Bitmap boardImage)
+        {
+            _scanner.ResetStateTracking(boardImage);
+        }
+
         public bool DetectWhiteView(Bitmap boardImage)
         {
             bool isWhiteView = _scanner.DetectPlayerSideFromImage(boardImage);
