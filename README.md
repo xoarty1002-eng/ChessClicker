@@ -48,7 +48,7 @@ These tests verify square-to-pixel mapping in both board orientations, reverse c
 
 - ChessClicker currently asks one Stockfish engine to recommend a move; it does not implement an engine-vs-engine match mode.
 - The chess position model is simplified and does not implement all FIDE rules (including check legality, castling, en passant, promotion, repetition, or draw adjudication). Do not rely on it as a complete rules arbiter.
-- Board-state scanning compares pixel brightness changes and is not general-purpose piece recognition. Site themes, animations, highlights, scaling, and browser chrome can affect results.
+- Board orientation is inferred from piece contrast on the outer two ranks, relative to each square's local background; if there is insufficient visible piece evidence, scanning stops with an error instead of guessing. Board-state scanning still compares pixel brightness changes and is not general-purpose piece recognition. Site themes, animations, highlights, scaling, and browser chrome can affect results.
 - The desktop mouse hook, screen capture, and engine downloader are Windows-specific. Linux compatibility is limited to cross-building the Windows target and running the portable unit tests.
 
 ## License

@@ -197,16 +197,67 @@ namespace ChessClicker
 
         public bool DetectPlayerSideFromImage(Bitmap boardImage)
         {
-            if (boardImage == null) return true;
-            int sqWidth = boardImage.Width / 8;
-            int sqHeight = boardImage.Height / 8;
-            int targetX = sqWidth / 2;
-            int targetY = (7 * sqHeight) + (sqHeight / 2);
+            ArgumentNullException.ThrowIfNull(boardImage);
+            if (boardImage.Width < 8 || boardImage.Height < 8)
+                throw new ArgumentException("The captured board must be at least 8-by-8 pixels.", nameof(boardImage));
 
-            if (targetX >= boardImage.Width || targetY >= boardImage.Height) return true;
+            double[,] squareContrast = new double[8, 8];
+            for (int rank = 0; rank < 8; rank++)
+            {
+                if (rank > 1 && rank < 6) continue;
+                for (int file = 0; file < 8; file++)
+                {
+                    Rectangle square = new(
+                        file * boardImage.Width / 8,
+                        rank * boardImage.Height / 8,
+                        (file + 1) * boardImage.Width / 8 - file * boardImage.Width / 8,
+                        (rank + 1) * boardImage.Height / 8 - rank * boardImage.Height / 8);
 
-            Color bottomLeftColor = boardImage.GetPixel(targetX, targetY);
-            return ((bottomLeftColor.R + bottomLeftColor.G + bottomLeftColor.B) / 3) <= 150;
+                    double centerLuminance = AverageLuminance(boardImage, GetRelativeRegion(square, 0.25, 0.25, 0.75, 0.75));
+                    double backgroundLuminance =
+                        (AverageLuminance(boardImage, GetRelativeRegion(square, 0.12, 0.12, 0.28, 0.28)) +
+                         AverageLuminance(boardImage, GetRelativeRegion(square, 0.72, 0.12, 0.88, 0.28)) +
+                         AverageLuminance(boardImage, GetRelativeRegion(square, 0.12, 0.72, 0.28, 0.88)) +
+                         AverageLuminance(boardImage, GetRelativeRegion(square, 0.72, 0.72, 0.88, 0.88))) / 4;
+
+                    squareContrast[rank, file] = centerLuminance - backgroundLuminance;
+                }
+            }
+
+            if (BoardOrientationDetector.TryDetectWhiteView(squareContrast, out bool isWhiteView))
+                return isWhiteView;
+
+            throw new InvalidOperationException(
+                "Could not determine board orientation from the pieces. Calibrate a full board with visible pieces on the first or last two ranks.");
+        }
+
+        private static Rectangle GetRelativeRegion(Rectangle square, double left, double top, double right, double bottom)
+        {
+            int x = square.X + (int)(square.Width * left);
+            int y = square.Y + (int)(square.Height * top);
+            int width = Math.Max(1, (int)(square.Width * (right - left)));
+            int height = Math.Max(1, (int)(square.Height * (bottom - top)));
+            return new Rectangle(x, y, width, height);
+        }
+
+        private static double AverageLuminance(Bitmap image, Rectangle region)
+        {
+            double total = 0;
+            int samples = 0;
+            int stepX = Math.Max(1, region.Width / 12);
+            int stepY = Math.Max(1, region.Height / 12);
+
+            for (int y = region.Top; y < region.Bottom && y < image.Height; y += stepY)
+            {
+                for (int x = region.Left; x < region.Right && x < image.Width; x += stepX)
+                {
+                    Color color = image.GetPixel(x, y);
+                    total += (color.R + color.G + color.B) / 3.0;
+                    samples++;
+                }
+            }
+
+            return samples == 0 ? 0 : total / samples;
         }
     }
 }
