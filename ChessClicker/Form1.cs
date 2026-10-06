@@ -155,7 +155,6 @@ namespace ChessClicker
         {
             if (_isCalibrating)
             {
-                _calibrationStep += 1;
                 OnCalibrationClick(point);
                 return false;
             }
@@ -226,11 +225,7 @@ namespace ChessClicker
 
         private string ScreenPointToSquare(Point point)
         {
-            int screenFile = (point.X - _activeBoardBounds.X) * 8 / _activeBoardBounds.Width;
-            int screenRank = (point.Y - _activeBoardBounds.Y) * 8 / _activeBoardBounds.Height;
-            int file = _isWhiteView ? screenFile : 7 - screenFile;
-            int rank = _isWhiteView ? 8 - screenRank : 1 + screenRank;
-            return $"{(char)('a' + file)}{rank}";
+            return BoardMouseCoordinates.ScreenPointToSquare(point, _activeBoardBounds, _isWhiteView);
         }
 
         // --- BUTTON TRIGGER: START / PAUSE SCAN TIMER LOOP ---
@@ -252,7 +247,6 @@ namespace ChessClicker
             {
                 try
                 {
-                    _isCalibrating = true;
                     EnsureDesktopMouseHook();
                 }
                 catch (Exception ex)
