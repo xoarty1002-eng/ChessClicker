@@ -34,6 +34,7 @@ public sealed class ChessClickerSettingsTests
         Assert.Equal(1, ChessClickerSettings.Default.RandomSkillIntervalTurns);
         Assert.False(ChessClickerSettings.Default.CalibrateWhilePlaying);
         Assert.Equal(50, ChessClickerSettings.Default.PreviewSmoothingPercent);
+        Assert.Equal(ChessBoard.StandardStartingFen, ChessClickerSettings.Default.StartingPositionFen);
     }
 
     [Theory]
@@ -61,10 +62,18 @@ public sealed class ChessClickerSettingsTests
     }
 
     [Fact]
+    public void RejectsInvalidStartingFen()
+    {
+        Assert.Throws<FormatException>(() => new ChessClickerSettings(
+            1000, 20, startingPositionFen: "not a fen"));
+    }
+
+    [Fact]
     public void SavesAndLoadsConfiguredPreviewRate()
     {
         string path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "settings.json");
-        var expected = new ChessClickerSettings(1500, 14, 12, 22, "Blue", true, 3, true, 75);
+        const string midgameFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1";
+        var expected = new ChessClickerSettings(1500, 14, 12, 22, "Blue", true, 3, true, 75, midgameFen);
 
         try
         {
@@ -80,6 +89,7 @@ public sealed class ChessClickerSettingsTests
             Assert.Equal(expected.RandomSkillIntervalTurns, actual.RandomSkillIntervalTurns);
             Assert.Equal(expected.CalibrateWhilePlaying, actual.CalibrateWhilePlaying);
             Assert.Equal(expected.PreviewSmoothingPercent, actual.PreviewSmoothingPercent);
+            Assert.Equal(expected.StartingPositionFen, actual.StartingPositionFen);
         }
         finally
         {

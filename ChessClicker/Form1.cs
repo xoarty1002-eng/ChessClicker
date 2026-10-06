@@ -22,6 +22,8 @@ namespace ChessClicker
         private bool _isCalibrating;
         private bool _isAutoCalibrating;
         private bool _isWhiteView = true;
+        private bool _positionInitialized;
+        private bool _startingPositionResetPending;
         private DateTime _lastAutoCalibrationAttempt;
         private DesktopMouseHook? _desktopMouseHook;
         private ChessClickerSettings _settings = ChessClickerSettings.Default;
@@ -38,6 +40,7 @@ namespace ChessClicker
             playButton.Click += PlayButton_Click;
             settingsButton.Click += btnSettings_Click;
             KeyDown += Form1_KeyDown;
+            moveInputTextBox.KeyDown += MoveInputTextBox_KeyDown;
 
             _controller.UpdateSettings(_settings);
             LoadSettings();
@@ -330,9 +333,22 @@ namespace ChessClicker
                 return;
             }
 
+            if (_controller.IsBusy)
+            {
+                Log("[Play] Wait for the current move operation to finish before starting.");
+                return;
+            }
+
             try
             {
                 EnsureDesktopMouseHook();
+                if (!_positionInitialized || _startingPositionResetPending)
+                {
+                    _controller.ResetPosition(_settings.StartingPositionFen);
+                    _positionInitialized = true;
+                    _startingPositionResetPending = false;
+                }
+
                 using Bitmap baseline = _controller.CaptureBoard(_activeBoardBounds);
                 _isWhiteView = _controller.DetectWhiteView(baseline);
                 _controller.ResetBoardTracking(baseline);
@@ -365,6 +381,12 @@ namespace ChessClicker
                 e.SuppressKeyPress = true;
                 PlayButton_Click(playButton, EventArgs.Empty);
             }
+            else if (e.KeyCode == Keys.F3)
+            {
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+                _ = SubmitTypedMoveAsync();
+            }
             else if (e.KeyCode == Keys.Escape && _isCalibrating)
             {
                 e.Handled = true;
@@ -377,13 +399,68 @@ namespace ChessClicker
             }
         }
 
+        private void MoveInputTextBox_KeyDown(object? sender, KeyEventArgs e)
+        {
+            if (e.KeyCode != Keys.Enter)
+                return;
+
+            e.Handled = true;
+            e.SuppressKeyPress = true;
+            _ = SubmitTypedMoveAsync();
+        }
+
+        private async Task SubmitTypedMoveAsync()
+        {
+            if (_controller.IsBusy)
+            {
+                Log("[Move input] Wait for the current move operation to finish.");
+                return;
+            }
+
+            if (_activeBoardBounds.Width < 40 || _activeBoardBounds.Height < 40)
+            {
+                Log("[Move input] Calibrate the board before sending a move.");
+                return;
+            }
+
+            try
+            {
+                await _controller.ExecuteTypedMoveAsync(
+                    moveInputTextBox.Text, _activeBoardBounds, _isWhiteView);
+            }
+            catch (Exception ex)
+            {
+                Log($"[Move input] {ex.Message}");
+            }
+        }
+
         private void btnSettings_Click(object? sender, EventArgs e)
         {
+            if (_controller.IsBusy)
+            {
+                Log("[Settings] Wait for the current move operation to finish before changing settings.");
+                return;
+            }
+
             using var settingsForm = new SettingsForm(_settings);
             if (settingsForm.ShowDialog(this) != DialogResult.OK)
                 return;
 
-            ChessClickerSettings updatedSettings = settingsForm.Settings;
+            ChessClickerSettings updatedSettings;
+            try
+            {
+                updatedSettings = settingsForm.Settings;
+            }
+            catch (Exception ex)
+            {
+                Log($"[Settings Error] {ex.Message}");
+                MessageBox.Show(ex.Message, "Invalid Settings", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            bool startingPositionChanged =
+                !string.Equals(_settings.StartingPositionFen, updatedSettings.StartingPositionFen, StringComparison.Ordinal);
+            bool isPlaying = _timerGameLoop.Enabled;
             try
             {
                 updatedSettings.SaveToFile(SettingsFilePath);
@@ -399,6 +476,21 @@ namespace ChessClicker
             _timerGameLoop.Interval = 1000 / _settings.FramesPerSecond;
             ApplyPreviewSettings();
             UpdateStatusLabel();
+            if (startingPositionChanged)
+            {
+                if (isPlaying)
+                {
+                    _startingPositionResetPending = true;
+                    Log("[Settings] New FEN will be loaded when Play is started again.");
+                }
+                else
+                {
+                    _controller.ResetPosition(_settings.StartingPositionFen);
+                    _positionInitialized = true;
+                    _startingPositionResetPending = false;
+                }
+            }
+
             Log($"[Settings] Saved. Preview rate: {_settings.FramesPerSecond} FPS; smoothing: {_settings.PreviewSmoothingPercent}%; calibrate while playing: {_settings.CalibrateWhilePlaying}.");
         }
 
@@ -422,7 +514,7 @@ namespace ChessClicker
             string state = _isCalibrating
                 ? "calibrating"
                 : _timerGameLoop.Enabled ? "playing" : "stopped";
-            statusLabel.Text = $"Preview: {_settings.FramesPerSecond} FPS | smooth {_settings.PreviewSmoothingPercent}% | {state} | {DateTime.Now:HH:mm:ss.fff}";
+            statusLabel.Text = $"{_settings.FramesPerSecond} FPS | {state}";
         }
 
         private static string GetBoardBoundsPath() =>

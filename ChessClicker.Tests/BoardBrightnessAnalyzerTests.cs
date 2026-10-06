@@ -81,6 +81,26 @@ public sealed class BoardBrightnessAnalyzerTests
         Assert.Contains(expectedMove, candidates.Split('|'));
     }
 
+    [Fact]
+    public void SelectsBlackPawnMoveFromBlackPerspectiveWhenStartingFenSaysBlackToMove()
+    {
+        var board = new ChessBoard(
+            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1");
+        IReadOnlyList<(int Rank, int File)> changes = [(6, 4), (4, 4)];
+        string[] candidates = BoardMoveDetector.CreateCandidates(changes, isWhiteView: false).Split('|');
+
+        string? move = BoardMoveDetector.FindUniqueLegalMove(candidates, candidate =>
+        {
+            int fromFile = candidate[0] - 'a';
+            int fromRank = 8 - (candidate[1] - '0');
+            int toFile = candidate[2] - 'a';
+            int toRank = 8 - (candidate[3] - '0');
+            return board.ValidateMove(fromRank, fromFile, toRank, toFile);
+        });
+
+        Assert.Equal("d7d5", move);
+    }
+
     private static int[,] FilledGrid(int value)
     {
         int[,] grid = new int[8, 8];

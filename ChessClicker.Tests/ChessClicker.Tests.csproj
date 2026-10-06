@@ -24,6 +24,7 @@
     <Compile Include="../ChessClicker/BoardBrightnessAnalyzer.cs" Link="BoardBrightnessAnalyzer.cs" />
     <Compile Include="../ChessClicker/BoardMoveDetector.cs" Link="BoardMoveDetector.cs" />
     <Compile Include="../ChessClicker/ChessClickerSettings.cs" Link="ChessClickerSettings.cs" />
+    <Compile Include="../ChessClicker/ChessBoard.cs" Link="ChessBoard.cs" />
     <Compile Include="../ChessClicker/BoardStabilityTracker.cs" Link="BoardStabilityTracker.cs" />
     <Compile Include="../ChessClicker/BoardGridCalibrator.cs" Link="BoardGridCalibrator.cs" />
   </ItemGroup>

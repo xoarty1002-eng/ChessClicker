@@ -5,6 +5,9 @@ namespace ChessClicker
 {
     public class ChessBoard
     {
+        public const string StandardStartingFen =
+            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
         // Matrix encoding rules:
         // White: 1=Pawn, 2=Knight, 3=Bishop, 4=Rook, 5=Queen, 6=King
         // Black: -1=Pawn, -2=Knight, -3=Bishop, -4=Rook, -5=Queen, -6=King
@@ -62,11 +65,17 @@ namespace ChessClicker
 
         private void LoadFen(string fen)
         {
+            ArgumentException.ThrowIfNullOrWhiteSpace(fen);
             _boardMatrix = new int[8, 8];
             string[] sections = fen.Split(' ');
-            string rowsData = sections[0];
+            if (sections.Length < 2 || sections[1] is not ("w" or "b"))
+                throw new FormatException("FEN must include a valid active color.");
 
+            string rowsData = sections[0];
             string[] ranks = rowsData.Split('/');
+            if (ranks.Length != 8)
+                throw new FormatException("FEN must contain exactly eight ranks.");
+
             for (int r = 0; r < 8; r++)
             {
                 int fileIndex = 0;
@@ -74,20 +83,33 @@ namespace ChessClicker
                 {
                     if (char.IsDigit(c))
                     {
-                        fileIndex += (c - '0');
+                        int emptySquares = c - '0';
+                        if (emptySquares is < 1 or > 8)
+                            throw new FormatException("FEN contains an invalid empty-square count.");
+                        fileIndex += emptySquares;
                     }
                     else
                     {
+                        if (MapCharToPieceCode(c) == 0)
+                            throw new FormatException($"FEN contains an invalid piece character '{c}'.");
+                        if (fileIndex >= 8)
+                            throw new FormatException("FEN rank contains more than eight squares.");
                         _boardMatrix[r, fileIndex] = MapCharToPieceCode(c);
                         fileIndex++;
                     }
+
+                    if (fileIndex > 8)
+                        throw new FormatException("FEN rank contains more than eight squares.");
                 }
+
+                if (fileIndex != 8)
+                    throw new FormatException("Each FEN rank must describe exactly eight squares.");
             }
 
-            if (sections.Length > 1)
-            {
-                Turn = sections[1].ToLower() == "w" ? "white" : "black";
-            }
+            Turn = sections[1] == "w" ? "white" : "black";
+            Side = Turn;
+            Check = false;
+            Checkmate = false;
         }
 
         private int MapCharToPieceCode(char c)
@@ -124,6 +146,16 @@ namespace ChessClicker
         /// </summary>
         public bool ValidateMove(int fromRank, int fromFile, int toRank, int toFile)
         {
+            return ValidateMove(fromRank, fromFile, toRank, toFile, enforceTurn: true);
+        }
+
+        public bool ValidateMoveIgnoringTurn(int fromRank, int fromFile, int toRank, int toFile)
+        {
+            return ValidateMove(fromRank, fromFile, toRank, toFile, enforceTurn: false);
+        }
+
+        private bool ValidateMove(int fromRank, int fromFile, int toRank, int toFile, bool enforceTurn)
+        {
             // 1. Structural window boundaries filter
             if (fromRank < 0 || fromRank > 7 || fromFile < 0 || fromFile > 7) return false;
             if (toRank < 0 || toRank > 7 || toFile < 0 || toFile > 7) return false;
@@ -133,8 +165,8 @@ namespace ChessClicker
             if (piece == 0) return false;
 
             // 2. Enforce structural turn sequencing constraints
-            if (Turn == "white" && piece < 0) return false;
-            if (Turn == "black" && piece > 0) return false;
+            if (enforceTurn && Turn == "white" && piece < 0) return false;
+            if (enforceTurn && Turn == "black" && piece > 0) return false;
 
             int targetSquare = _boardMatrix[toRank, toFile];
 
@@ -219,19 +251,35 @@ namespace ChessClicker
 
         public bool MakeMove(string uciMove)
         {
-            if (string.IsNullOrEmpty(uciMove) || uciMove.Length < 4) return false;
+            return TryMakeMove(uciMove, enforceTurn: true);
+        }
+
+        public bool MakeObservedMove(string uciMove)
+        {
+            return TryMakeMove(uciMove, enforceTurn: false);
+        }
+
+        private bool TryMakeMove(string uciMove, bool enforceTurn)
+        {
+            if (string.IsNullOrEmpty(uciMove) || uciMove.Length < 4 ||
+                uciMove[0] is < 'a' or > 'h' ||
+                uciMove[2] is < 'a' or > 'h' ||
+                uciMove[1] is < '1' or > '8' ||
+                uciMove[3] is < '1' or > '8')
+                return false;
 
             int fromFile = uciMove[0] - 'a';
             int fromRank = 8 - (uciMove[1] - '0');
             int toFile = uciMove[2] - 'a';
             int toRank = 8 - (uciMove[3] - '0');
+            if (!ValidateMove(fromRank, fromFile, toRank, toFile, enforceTurn))
+                return false;
 
-            if (!ValidateMove(fromRank, fromFile, toRank, toFile)) return false;
-
-            _boardMatrix[toRank, toFile] = _boardMatrix[fromRank, fromFile];
+            int piece = _boardMatrix[fromRank, fromFile];
+            _boardMatrix[toRank, toFile] = piece;
             _boardMatrix[fromRank, fromFile] = 0;
 
-            Turn = (Turn == "white") ? "black" : "white";
+            Turn = piece > 0 ? "black" : "white";
             return true;
         }
 

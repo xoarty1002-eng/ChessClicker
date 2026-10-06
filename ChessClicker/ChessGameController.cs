@@ -41,6 +41,18 @@ namespace ChessClicker
             _scanner.ResetStateTracking(boardImage);
         }
 
+        public void ResetPosition(string fen)
+        {
+            if (IsBusy)
+                throw new InvalidOperationException("Cannot reset the tracked position while a move is being processed.");
+
+            _board.CreateBoard(fen);
+            _pendingFromSquare = null;
+            _moveConfirmation.Cancel();
+            NotifyBoardChanged();
+            StatusChanged?.Invoke($"[Position loaded] {_board.Turn} to move.");
+        }
+
         public bool DetectWhiteView(Bitmap boardImage)
         {
             bool isWhiteView = _scanner.DetectPlayerSideFromImage(boardImage);
@@ -84,7 +96,7 @@ namespace ChessClicker
                 if (appliedMove == null)
                 {
                     StatusChanged?.Invoke(
-                        $"[Ignored board change] No unique legal move could be selected from the changed squares for {_board.Turn} to move.");
+                        $"[Ignored board change] No unique legal move could be selected from the changed squares for {_board.Turn} to move. Check the board calibration and tracked starting position.");
                     return;
                 }
 
@@ -319,17 +331,47 @@ namespace ChessClicker
 
         private string? ApplyDetectedMove(string candidates)
         {
-            string? move = BoardMoveDetector.FindUniqueLegalMove(candidates.Split('|'), IsLegalMove);
-            return move != null && _board.MakeMove(move) ? move : null;
+            string[] moves = candidates.Split('|');
+            string? move = BoardMoveDetector.FindUniqueLegalMove(moves, IsLegalMove);
+            if (move != null)
+                return _board.MakeMove(move) ? move : null;
+
+            string? observedMove = BoardMoveDetector.FindUniqueLegalMove(moves, IsLegalMoveIgnoringTurn);
+            if (observedMove == null || IsLegalMove(observedMove) ||
+                !_board.MakeObservedMove(observedMove))
+                return null;
+
+            StatusChanged?.Invoke(
+                $"[Turn resynchronized] Detected {observedMove} as a legal move for the other side; tracked turn corrected to {_board.Turn}.");
+            return observedMove;
         }
 
         private bool IsLegalMove(string move)
         {
+            return IsLegalMove(move, enforceTurn: true);
+        }
+
+        private bool IsLegalMoveIgnoringTurn(string move)
+        {
+            return IsLegalMove(move, enforceTurn: false);
+        }
+
+        private bool IsLegalMove(string move, bool enforceTurn)
+        {
+            if (move.Length < 4 ||
+                move[0] is < 'a' or > 'h' ||
+                move[2] is < 'a' or > 'h' ||
+                move[1] is < '1' or > '8' ||
+                move[3] is < '1' or > '8')
+                return false;
+
             int fromFile = move[0] - 'a';
             int fromRank = 8 - (move[1] - '0');
             int toFile = move[2] - 'a';
             int toRank = 8 - (move[3] - '0');
-            return _board.ValidateMove(fromRank, fromFile, toRank, toFile);
+            return enforceTurn
+                ? _board.ValidateMove(fromRank, fromFile, toRank, toFile)
+                : _board.ValidateMoveIgnoringTurn(fromRank, fromFile, toRank, toFile);
         }
 
         private void NotifyBoardChanged()

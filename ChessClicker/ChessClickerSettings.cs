@@ -16,6 +16,7 @@ namespace ChessClicker
         public int RandomSkillIntervalTurns { get; }
         public bool CalibrateWhilePlaying { get; }
         public int PreviewSmoothingPercent { get; }
+        public string StartingPositionFen { get; }
 
         [JsonConstructor]
         public ChessClickerSettings(
@@ -27,7 +28,8 @@ namespace ChessClicker
             bool randomizeStockfishSkill = false,
             int randomSkillIntervalTurns = 1,
             bool calibrateWhilePlaying = false,
-            int previewSmoothingPercent = 50)
+            int previewSmoothingPercent = 50,
+            string startingPositionFen = ChessBoard.StandardStartingFen)
         {
             if (moveTimeMilliseconds < 100 || moveTimeMilliseconds > 10000)
                 throw new ArgumentOutOfRangeException(nameof(moveTimeMilliseconds), "Move time must be between 100 and 10000 milliseconds.");
@@ -43,6 +45,8 @@ namespace ChessClicker
                 throw new ArgumentOutOfRangeException(nameof(randomSkillIntervalTurns), "Random skill interval must be between 1 and 100 turns.");
             if (previewSmoothingPercent < 0 || previewSmoothingPercent > 100)
                 throw new ArgumentOutOfRangeException(nameof(previewSmoothingPercent), "Preview smoothing must be between 0 and 100 percent.");
+            ArgumentException.ThrowIfNullOrWhiteSpace(startingPositionFen);
+            _ = new ChessBoard(startingPositionFen);
 
             MoveTimeMilliseconds = moveTimeMilliseconds;
             StockfishSkillLevel = stockfishSkillLevel;
@@ -53,6 +57,7 @@ namespace ChessClicker
             RandomSkillIntervalTurns = randomSkillIntervalTurns;
             CalibrateWhilePlaying = calibrateWhilePlaying;
             PreviewSmoothingPercent = previewSmoothingPercent;
+            StartingPositionFen = startingPositionFen.Trim();
         }
 
         public static ChessClickerSettings Default { get; } = new(1000, 20);
