@@ -39,6 +39,7 @@ namespace ChessClicker
             var footer = new TableLayoutPanel();
             var buttons = new FlowLayoutPanel();
             var inputPanel = new TableLayoutPanel();
+            var inputActions = new TableLayoutPanel();
 
             ((System.ComponentModel.ISupportInitialize)previewPictureBox).BeginInit();
             SuspendLayout();
@@ -71,15 +72,12 @@ namespace ChessClicker
             buttons.AutoScroll = true;
 
             ConfigureButton(calibrateButton, "Manual calibrate");
-            ConfigureButton(scanFenButton, "Scan FEN");
             ConfigureButton(playButton, "Play (F2)");
             ConfigureButton(settingsButton, "Settings");
             calibrateButton.Width = 105;
-            scanFenButton.Width = 80;
             playButton.Width = 82;
             settingsButton.Width = 68;
             buttons.Controls.Add(calibrateButton);
-            buttons.Controls.Add(scanFenButton);
             buttons.Controls.Add(playButton);
             buttons.Controls.Add(settingsButton);
 
@@ -93,19 +91,29 @@ namespace ChessClicker
             inputPanel.ColumnCount = 2;
             inputPanel.RowCount = 1;
             inputPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            inputPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 102));
+            inputPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 126));
             inputPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             inputPanel.Margin = new Padding(0, 0, 0, 4);
             moveInputTextBox.Dock = DockStyle.Fill;
             moveInputTextBox.Multiline = true;
             moveInputTextBox.ScrollBars = ScrollBars.Vertical;
             moveInputTextBox.PlaceholderText = "Enter UCI move (e2e4) or full FEN";
-            clickMoveButton.Text = "Analyze / Click\n(F3)";
+            inputActions.Dock = DockStyle.Fill;
+            inputActions.ColumnCount = 1;
+            inputActions.RowCount = 2;
+            inputActions.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+            inputActions.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+            clickMoveButton.Text = "Analyze / Click (F3)";
             clickMoveButton.Dock = DockStyle.Fill;
-            clickMoveButton.Margin = new Padding(4, 0, 0, 0);
+            clickMoveButton.Margin = new Padding(4, 0, 0, 2);
             clickMoveButton.UseVisualStyleBackColor = true;
+            ConfigureButton(scanFenButton, "Scan FEN");
+            scanFenButton.Dock = DockStyle.Fill;
+            scanFenButton.Margin = new Padding(4, 2, 0, 0);
+            inputActions.Controls.Add(clickMoveButton, 0, 0);
+            inputActions.Controls.Add(scanFenButton, 0, 1);
             inputPanel.Controls.Add(moveInputTextBox, 0, 0);
-            inputPanel.Controls.Add(clickMoveButton, 1, 0);
+            inputPanel.Controls.Add(inputActions, 1, 0);
 
             logTextBox.Dock = DockStyle.Fill;
             logTextBox.Multiline = true;

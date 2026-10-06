@@ -94,7 +94,10 @@ namespace ChessClicker
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 string? candidates = _scanner.ScanForStateChanges(
-                    boardImage, isWhiteView, _settings.BrightnessThreshold);
+                    boardImage,
+                    isWhiteView,
+                    _settings.BrightnessThreshold,
+                    _settings.StableBoardDurationMilliseconds);
                 if (string.IsNullOrEmpty(candidates)) return;
 
                 if (_moveConfirmation.PendingMove is string pendingMove)
@@ -362,7 +365,10 @@ namespace ChessClicker
                 await Task.Delay(MoveConfirmationPollInterval, cancellationToken);
                 using Bitmap currentBoard = CaptureBoard(bounds);
                 string? candidates = _scanner.ScanForStateChanges(
-                    currentBoard, isWhiteView, _settings.BrightnessThreshold);
+                    currentBoard,
+                    isWhiteView,
+                    _settings.BrightnessThreshold,
+                    _settings.StableBoardDurationMilliseconds);
                 if (string.IsNullOrEmpty(candidates))
                     continue;
 

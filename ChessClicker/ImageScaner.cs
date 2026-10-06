@@ -12,6 +12,7 @@ namespace ChessClicker
         private int[,]? _previousGridBrightness;
         private int[,]? _pendingGridBrightness;
         private int _pendingStableFrames;
+        private DateTimeOffset? _pendingStableSince;
 
         /// <summary>
         /// Screens only a specific calibrated part of the desktop monitor directly.
@@ -137,9 +138,15 @@ namespace ChessClicker
         /// Compares the current square brightness states with the previous baseline to track state modifications.
         /// </summary>
         /// <returns>A string representation of the move (e.g. "e2e4") if a state change correlates to a valid chess move; otherwise null.</returns>
-        public string? ScanForStateChanges(Bitmap currentBoard, bool isWhiteView, int brightnessThreshold = 18)
+        public string? ScanForStateChanges(
+            Bitmap currentBoard,
+            bool isWhiteView,
+            int brightnessThreshold = 18,
+            int minimumStableDurationMilliseconds = 0)
         {
             if (currentBoard == null) return null;
+            if (minimumStableDurationMilliseconds < 0)
+                throw new ArgumentOutOfRangeException(nameof(minimumStableDurationMilliseconds));
 
             int[,] currentBrightness = ExtractGridBrightness(currentBoard);
 
@@ -154,29 +161,28 @@ namespace ChessClicker
 
             if (changedSquares.Count == 0)
             {
-                _previousGridBrightness = currentBrightness;
-                _pendingGridBrightness = null;
-                _pendingStableFrames = 0;
+                if (_pendingGridBrightness == null)
+                {
+                    _previousGridBrightness = currentBrightness;
+                    return null;
+                }
+
+                UpdatePendingStability(currentBrightness);
+                if (PendingChangeHasSettled(minimumStableDurationMilliseconds))
+                {
+                    _previousGridBrightness = currentBrightness;
+                    ResetPendingChange();
+                }
                 return null;
             }
 
-            if (GridsAreStable(currentBrightness, _pendingGridBrightness))
-            {
-                _pendingStableFrames++;
-            }
-            else
-            {
-                _pendingGridBrightness = currentBrightness;
-                _pendingStableFrames = 1;
-            }
-
-            if (_pendingStableFrames < 2)
+            UpdatePendingStability(currentBrightness);
+            if (!PendingChangeHasSettled(minimumStableDurationMilliseconds))
                 return null;
 
             string candidates = BoardMoveDetector.CreateCandidates(changedSquares, isWhiteView);
             _previousGridBrightness = currentBrightness;
-            _pendingGridBrightness = null;
-            _pendingStableFrames = 0;
+            ResetPendingChange();
             if (!string.IsNullOrEmpty(candidates))
                 return candidates;
 
@@ -187,8 +193,34 @@ namespace ChessClicker
         {
             ArgumentNullException.ThrowIfNull(currentBoard);
             _previousGridBrightness = ExtractGridBrightness(currentBoard);
+            ResetPendingChange();
+        }
+
+        private void UpdatePendingStability(int[,] currentBrightness)
+        {
+            if (GridsAreStable(currentBrightness, _pendingGridBrightness))
+            {
+                _pendingStableFrames++;
+            }
+            else
+            {
+                _pendingGridBrightness = currentBrightness;
+                _pendingStableFrames = 1;
+                _pendingStableSince = DateTimeOffset.UtcNow;
+            }
+        }
+
+        private bool PendingChangeHasSettled(int minimumStableDurationMilliseconds) =>
+            _pendingStableFrames >= 2 &&
+            _pendingStableSince != null &&
+            DateTimeOffset.UtcNow - _pendingStableSince.Value >=
+                TimeSpan.FromMilliseconds(minimumStableDurationMilliseconds);
+
+        private void ResetPendingChange()
+        {
             _pendingGridBrightness = null;
             _pendingStableFrames = 0;
+            _pendingStableSince = null;
         }
 
         private static bool GridsAreStable(int[,] current, int[,]? previous)
