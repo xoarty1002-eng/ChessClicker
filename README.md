@@ -18,9 +18,10 @@ dotnet build ChessClicker.slnx -p:EnableWindowsTargeting=true
 
 1. Build and start ChessClicker on Windows.
 2. Open a local chessboard or a site's analysis board. Do not use engine assistance in a live rated or casual game; follow the site's fair-play rules.
-3. Choose **Calibrate**, then click the chessboard's outer top-left and bottom-right corners in that order.
+3. Choose **Calibrate**, then click the chessboard's outer top-left and bottom-right corners in that order. **Auto-fit** expands the capture slightly and searches for the strongest 8×8 grid-edge alignment; check the preview and recalibrate manually if the fit is wrong.
 4. Check the captured board preview and click **Start Scanner Loop**.
-5. To register a move, click its source square and then its destination square. **Play Move** asks Stockfish for a move from the tracked position and clicks the corresponding squares.
+5. Use **Settings** to choose Stockfish thinking time (100–10,000 ms) and skill level (0–20).
+6. To register a move, click its source square and then its destination square. **Play Move** asks Stockfish for a move from the tracked position and clicks the corresponding squares. The app waits up to three seconds for the captured board to show the move before updating its tracked position. If the board does not reflect the click, the move is reported as unconfirmed and the app does not pretend the position advanced; keep the scanner running to allow later synchronization.
 
 Calibration, screen capture, and mouse automation require a visible desktop. They do not work against a browser page fetched in the background.
 
@@ -42,13 +43,16 @@ Run the portable mouse-coordinate and input-sequence unit tests on Linux or Wind
 dotnet test ChessClicker.Tests/ChessClicker.Tests.csproj
 ```
 
-These tests verify square-to-pixel mapping in both board orientations, reverse coordinate mapping, ordered mouse down/up actions, cursor restoration, and invalid input handling. They use a fake mouse input and do not send real desktop events.
+These tests verify square-to-pixel mapping in both board orientations, reverse coordinate mapping, ordered mouse down/up actions, cursor restoration, 8×8 grid fitting, brightness-shift normalization, unique legal-candidate selection, and invalid input handling. They use a fake mouse input and do not send real desktop events or verify a real site's board.
 
 ## Current limitations
 
 - ChessClicker currently asks one Stockfish engine to recommend a move; it does not implement an engine-vs-engine match mode.
 - The chess position model is simplified and does not implement all FIDE rules (including check legality, castling, en passant, promotion, repetition, or draw adjudication). Do not rely on it as a complete rules arbiter.
 - Board orientation is inferred from piece contrast on the outer two ranks, relative to each square's local background; if there is insufficient visible piece evidence, scanning stops with an error instead of guessing. Board-state scanning still compares pixel brightness changes and is not general-purpose piece recognition. Site themes, animations, highlights, scaling, and browser chrome can affect results.
+- The calibrated capture is divided proportionally into an 8×8 grid, including any remainder pixels. **Auto-fit** searches nearby crop bounds for the strongest grid-edge alignment. The scanner subtracts the median brightness shift across all 64 cells to suppress global lighting changes, enumerates moves from changed cells, and accepts a detected move only when exactly one candidate passes the current move validator. Ambiguous changes are rejected. The current move validator is simplified; verify positions manually.
+- Settings control Stockfish analysis strength and thinking time only. There is no human-mimicry mode or feature intended to conceal engine assistance or evade fair-play detection.
+- Engine moves are synchronized only after a stable two-square screen change matching the requested move is observed. This visual confirmation is heuristic, not proof that a site accepted the move; verify the board and game state yourself.
 - The desktop mouse hook, screen capture, and engine downloader are Windows-specific. Linux compatibility is limited to cross-building the Windows target and running the portable unit tests.
 
 ## License

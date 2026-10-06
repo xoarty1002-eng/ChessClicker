@@ -37,8 +37,8 @@ namespace ChessClicker
             int[,] brightnessMatrix = new int[8, 8];
             if (boardImage == null) return brightnessMatrix;
 
-            int sqWidth = boardImage.Width / 8;
-            int sqHeight = boardImage.Height / 8;
+            if (boardImage.Width < 8 || boardImage.Height < 8)
+                throw new ArgumentException("The captured board must be at least 8-by-8 pixels.", nameof(boardImage));
 
             BitmapData bitmapData = boardImage.LockBits(
                 new Rectangle(0, 0, boardImage.Width, boardImage.Height),
@@ -57,16 +57,21 @@ namespace ChessClicker
                 {
                     for (int file = 0; file < 8; file++)
                     {
-                        // Sample a 5x5 micro-grid at the center of the square to smooth out transient mouse cursor noise
-                        int centerX = (file * sqWidth) + (sqWidth / 2);
-                        int centerY = (rank * sqHeight) + (sqHeight / 2);
+                        int left = file * boardImage.Width / 8;
+                        int right = (file + 1) * boardImage.Width / 8;
+                        int top = rank * boardImage.Height / 8;
+                        int bottom = (rank + 1) * boardImage.Height / 8;
+                        int centerX = (left + right) / 2;
+                        int centerY = (top + bottom) / 2;
+                        int radiusX = Math.Min(2, Math.Max(0, (right - left - 1) / 2));
+                        int radiusY = Math.Min(2, Math.Max(0, (bottom - top - 1) / 2));
 
                         long totalLuminance = 0;
                         int samples = 0;
 
-                        for (int offsetY = -2; offsetY <= 2; offsetY++)
+                        for (int offsetY = -radiusY; offsetY <= radiusY; offsetY++)
                         {
-                            for (int offsetX = -2; offsetX <= 2; offsetX++)
+                            for (int offsetX = -radiusX; offsetX <= radiusX; offsetX++)
                             {
                                 int sampleX = centerX + offsetX;
                                 int sampleY = centerY + offsetY;
@@ -111,27 +116,12 @@ namespace ChessClicker
                 return null;
             }
 
-            List<string> changedSquares = new List<string>();
-
-            // Threshold for distinguishing genuine piece movements from subtle pixel compression artifacts
-            int changeThreshold = 18;
-
-            for (int rank = 0; rank < 8; rank++)
-            {
-                for (int file = 0; file < 8; file++)
-                {
-                    int delta = Math.Abs(currentBrightness[rank, file] - _previousGridBrightness[rank, file]);
-
-                    if (delta > changeThreshold)
-                    {
-                        string squareName = ConvertGridToAlgebraic(file, rank, isWhiteView);
-                        changedSquares.Add(squareName);
-                    }
-                }
-            }
+            IReadOnlyList<(int Rank, int File)> changedSquares =
+                BoardBrightnessAnalyzer.FindChangedSquares(_previousGridBrightness, currentBrightness);
 
             if (changedSquares.Count == 0)
             {
+                _previousGridBrightness = currentBrightness;
                 _pendingGridBrightness = null;
                 _pendingStableFrames = 0;
                 return null;
@@ -150,16 +140,12 @@ namespace ChessClicker
             if (_pendingStableFrames < 2)
                 return null;
 
-            // A stable move changes its source and destination squares.
-            if (changedSquares.Count == 2)
-            {
-                string candidate1 = $"{changedSquares[0]}{changedSquares[1]}";
-                string candidate2 = $"{changedSquares[1]}{changedSquares[0]}";
-                _previousGridBrightness = currentBrightness;
-                _pendingGridBrightness = null;
-                _pendingStableFrames = 0;
-                return $"{candidate1}|{candidate2}";
-            }
+            string candidates = BoardMoveDetector.CreateCandidates(changedSquares, isWhiteView);
+            _previousGridBrightness = currentBrightness;
+            _pendingGridBrightness = null;
+            _pendingStableFrames = 0;
+            if (!string.IsNullOrEmpty(candidates))
+                return candidates;
 
             // Persistent highlights or multi-square changes are not a normal move.
             if (_pendingStableFrames >= 4)
@@ -170,6 +156,14 @@ namespace ChessClicker
             }
 
             return null;
+        }
+
+        public void ResetStateTracking(Bitmap currentBoard)
+        {
+            ArgumentNullException.ThrowIfNull(currentBoard);
+            _previousGridBrightness = ExtractGridBrightness(currentBoard);
+            _pendingGridBrightness = null;
+            _pendingStableFrames = 0;
         }
 
         private static bool GridsAreStable(int[,] current, int[,]? previous)

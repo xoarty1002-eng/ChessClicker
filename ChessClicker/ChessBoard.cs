@@ -284,7 +284,7 @@ namespace ChessClicker
         }
         public string GetDebugBoardString()
         {
-            StringBuilder sb = new StringBuilder(); sb.AppendLine($"=== Side: {Side} | Turn: {Turn} ===");
+            StringBuilder sb = new StringBuilder(); sb.AppendLine($"=== Player: {Side} | Turn: {Turn} ===");
             sb.AppendLine($"=== Check: {Check} | Mate: {Checkmate} ===");
             for (int r = 0; r < 8; r++)
             {

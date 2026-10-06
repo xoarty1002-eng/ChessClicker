@@ -61,8 +61,13 @@ namespace ChessClicker
             return installedExe;
         }
 
-        public string GetBestMove(string stockfishPath, string fen, int moveTimeMs = 1000)
+        public string GetBestMove(string stockfishPath, string fen, int moveTimeMs = 1000, int skillLevel = 20)
         {
+            if (moveTimeMs < 100 || moveTimeMs > 10000)
+                throw new ArgumentOutOfRangeException(nameof(moveTimeMs), "Move time must be between 100 and 10000 milliseconds.");
+            if (skillLevel < 0 || skillLevel > 20)
+                throw new ArgumentOutOfRangeException(nameof(skillLevel), "Stockfish skill level must be between 0 and 20.");
+
             string bestMove = "None";
             ProcessStartInfo startInfo = new ProcessStartInfo
             {
@@ -80,6 +85,7 @@ namespace ChessClicker
                 using (StreamWriter inputWriter = engineProcess.StandardInput)
                 {
                     inputWriter.WriteLine("uci");
+                    inputWriter.WriteLine($"setoption name Skill Level value {skillLevel}");
                     inputWriter.WriteLine("ucinewgame");
                     inputWriter.WriteLine($"position fen {fen}");
                     inputWriter.WriteLine($"go movetime {moveTimeMs}");
