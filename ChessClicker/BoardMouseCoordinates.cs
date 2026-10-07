@@ -25,18 +25,32 @@ namespace ChessClicker
 
     public static class BoardMouseCoordinates
     {
-        public static Point SquareCenter(string square, Rectangle boardBounds, bool isWhiteView)
+        public static string ScreenCellToSquare(int screenFile, int screenRank, bool isWhiteView)
+        {
+            ValidateScreenCell(screenFile, screenRank);
+            int file = isWhiteView ? screenFile : 7 - screenFile;
+            int rank = isWhiteView ? 8 - screenRank : screenRank + 1;
+            return $"{(char)('a' + file)}{rank}";
+        }
+
+        public static (int File, int Rank) SquareToScreenCell(string square, bool isWhiteView)
         {
             ValidateSquare(square, nameof(square));
-            ValidateBoardBounds(boardBounds);
-
-            int fileIndex = square[0] - 'a';
-            int rankIndex = 8 - (square[1] - '0');
+            int file = square[0] - 'a';
+            int rank = 8 - (square[1] - '0');
             if (!isWhiteView)
             {
-                fileIndex = 7 - fileIndex;
-                rankIndex = 7 - rankIndex;
+                file = 7 - file;
+                rank = 7 - rank;
             }
+
+            return (file, rank);
+        }
+
+        public static Point SquareCenter(string square, Rectangle boardBounds, bool isWhiteView)
+        {
+            ValidateBoardBounds(boardBounds);
+            (int fileIndex, int rankIndex) = SquareToScreenCell(square, isWhiteView);
 
             double squareWidth = boardBounds.Width / 8.0;
             double squareHeight = boardBounds.Height / 8.0;
@@ -53,9 +67,17 @@ namespace ChessClicker
 
             int screenFile = (point.X - boardBounds.X) * 8 / boardBounds.Width;
             int screenRank = (point.Y - boardBounds.Y) * 8 / boardBounds.Height;
-            int file = isWhiteView ? screenFile : 7 - screenFile;
-            int rank = isWhiteView ? 8 - screenRank : 1 + screenRank;
-            return $"{(char)('a' + file)}{rank}";
+            return ScreenCellToSquare(screenFile, screenRank, isWhiteView);
+        }
+
+        private static void ValidateScreenCell(int screenFile, int screenRank)
+        {
+            if (screenFile is < 0 or > 7)
+                throw new ArgumentOutOfRangeException(
+                    nameof(screenFile), "Screen column must be within the board.");
+            if (screenRank is < 0 or > 7)
+                throw new ArgumentOutOfRangeException(
+                    nameof(screenRank), "Screen row must be within the board.");
         }
 
         internal static void ValidateSquare(string square, string parameterName)

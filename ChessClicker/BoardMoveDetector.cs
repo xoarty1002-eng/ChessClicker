@@ -98,9 +98,7 @@ namespace ChessClicker
                 if (rank < 0 || rank > 7 || file < 0 || file > 7)
                     throw new ArgumentOutOfRangeException(nameof(changedSquares), "Changed square coordinates must be within the board.");
 
-                char fileChar = isWhiteView ? (char)('a' + file) : (char)('h' - file);
-                int rankNumber = isWhiteView ? 8 - rank : 1 + rank;
-                squares.Add($"{fileChar}{rankNumber}");
+                squares.Add(BoardMouseCoordinates.ScreenCellToSquare(file, rank, isWhiteView));
             }
 
             string? castlingMove = GetCastlingMove(squares);

@@ -172,7 +172,9 @@ namespace ChessClicker
             if (_lastDetectedWhiteView != isWhiteView)
             {
                 _lastDetectedWhiteView = isWhiteView;
-                StatusChanged?.Invoke($"[Board orientation] Detected {(isWhiteView ? "White" : "Black")} perspective.");
+                StatusChanged?.Invoke(isWhiteView
+                    ? "[Board orientation] White is at the bottom; files run a-h from left to right."
+                    : "[Board orientation] Black is at the bottom; files run h-a from left to right.");
             }
 
             return isWhiteView;
@@ -190,14 +192,27 @@ namespace ChessClicker
                 string? candidates = _scanner.ScanForStateChanges(
                     boardImage,
                     isWhiteView,
+                    out IReadOnlyList<(int Rank, int File)> detectedSquares,
                     _settings.BrightnessThreshold,
                     _settings.StableBoardDurationMilliseconds,
                     _board);
                 if (string.IsNullOrEmpty(candidates))
                 {
+                    if (detectedSquares.Count > 0)
+                    {
+                        StatusChanged?.Invoke(
+                            $"[Board detection] Tracked turn: {_board.Turn}; bottom: " +
+                            $"{(isWhiteView ? "White" : "Black")}; changed screen cells: " +
+                            $"{FormatDetectedSquares(detectedSquares, isWhiteView)}; " +
+                            "no move candidates could be generated.");
+                    }
                     ExpirePendingClickHint();
                     return;
                 }
+
+                string detectionSummary = DescribeBoardDetection(
+                    detectedSquares, candidates, isWhiteView);
+                StatusChanged?.Invoke($"[Board detection] {detectionSummary}");
 
                 if (BoardImageStillMatchesTrackedPosition(boardImage, isWhiteView))
                 {
@@ -225,7 +240,7 @@ namespace ChessClicker
                         {
                             _moveConfirmation.Expect(pendingMove);
                             StatusChanged?.Invoke(
-                                $"[Move not synchronized] Expected {pendingMove}, but the changed squares did not uniquely confirm a legal move. The tracked position was not changed.");
+                                $"[Move not synchronized] Expected {pendingMove}, but no unique move matched. {detectionSummary} The tracked position was not changed.");
                             return;
                         }
 
@@ -246,7 +261,7 @@ namespace ChessClicker
                 if (appliedMove == null)
                 {
                     StatusChanged?.Invoke(
-                        $"[Ignored board change] Changed squares did not uniquely confirm a legal move for {_board.Turn} to move. Check the board crop and tracked FEN.");
+                        $"[Ignored board change] No unique move matched. {detectionSummary}");
                     return;
                 }
 
@@ -336,8 +351,12 @@ namespace ChessClicker
 
             if (!ShouldEngineMove(isWhiteView))
             {
+                bool engineIsWhite = ChessSideSelection.IsWhiteAtScreenSide(
+                    isWhiteView, _settings.EngineSide);
                 StatusChanged?.Invoke(
-                    $"[Play] Waiting for {_board.Turn} to move; the engine controls the other side.");
+                    $"[Play] Waiting for {_board.Turn} to move; the engine controls " +
+                    $"{(engineIsWhite ? "White" : "Black")} ({_settings.EngineSide.ToLowerInvariant()}, " +
+                    $"{(isWhiteView ? "White" : "Black")} at bottom).");
                 return;
             }
 
@@ -495,7 +514,7 @@ namespace ChessClicker
                 $"[Click targets] {move[..2]}=({fromPoint.X},{fromPoint.Y}), " +
                 $"{move.Substring(2, 2)}=({toPoint.X},{toPoint.Y}); board crop " +
                 $"({bounds.X},{bounds.Y},{bounds.Width}x{bounds.Height}), " +
-                $"bottom {(isWhiteView ? "White" : "Black")}.");
+                $"bottom {(isWhiteView ? "White" : "Black")}; tracked {_board.Turn} to move.");
             try
             {
                 _clicker.ExecuteMoveOnScreen(move, bounds, isWhiteView);
@@ -518,11 +537,26 @@ namespace ChessClicker
                 string? candidates = _scanner.ScanForStateChanges(
                     currentBoard,
                     isWhiteView,
+                    out IReadOnlyList<(int Rank, int File)> detectedSquares,
                     _settings.BrightnessThreshold,
                     _settings.StableBoardDurationMilliseconds,
                     _board);
                 if (string.IsNullOrEmpty(candidates))
+                {
+                    if (detectedSquares.Count > 0)
+                    {
+                        StatusChanged?.Invoke(
+                            $"[Board detection] Tracked turn: {_board.Turn}; bottom: " +
+                            $"{(isWhiteView ? "White" : "Black")}; changed screen cells: " +
+                            $"{FormatDetectedSquares(detectedSquares, isWhiteView)}; " +
+                            "no move candidates could be generated.");
+                    }
                     continue;
+                }
+
+                string detectionSummary = DescribeBoardDetection(
+                    detectedSquares, candidates, isWhiteView);
+                StatusChanged?.Invoke($"[Board detection] {detectionSummary}");
 
                 if (BoardImageStillMatchesTrackedPosition(currentBoard, isWhiteView))
                 {
@@ -567,21 +601,18 @@ namespace ChessClicker
                     _scanner.ExtractGridBrightness(baseline),
                     _scanner.ExtractGridBrightness(finalBoard),
                     _settings.BrightnessThreshold);
-            string changedSquareList = string.Join(
-                ", ",
-                changedSquares.Select(square =>
-                {
-                    char file = isWhiteView
-                        ? (char)('a' + square.File)
-                        : (char)('h' - square.File);
-                    int rank = isWhiteView ? 8 - square.Rank : 1 + square.Rank;
-                    return $"{file}{rank}";
-                }));
+            string changedSquareList = FormatDetectedSquares(changedSquares, isWhiteView);
+            string finalCandidates = BoardMoveDetector.CreateCandidates(
+                changedSquares, isWhiteView, _board);
+            string timeoutDetectionSummary = string.IsNullOrEmpty(finalCandidates)
+                ? "No move candidates could be generated."
+                : DescribeBoardDetection(changedSquares, finalCandidates, isWhiteView);
             StatusChanged?.Invoke(
                 $"[Move not confirmed] {move} was sent, but no matching move appeared within " +
                 $"{MoveConfirmationTimeout.TotalSeconds:0} seconds. Changed crop squares: " +
                 $"{(changedSquareList.Length == 0 ? "none" : changedSquareList)}. " +
-                $"Verify the crop and click targets in the log. The tracked position was not advanced.");
+                $"{timeoutDetectionSummary} Verify the crop and click targets in the log. " +
+                $"The tracked position ({_board.Turn} to move) was not advanced.");
         }
 
         private async Task<bool> WaitForStableBoardAsync(Rectangle bounds, CancellationToken cancellationToken)
@@ -663,6 +694,46 @@ namespace ChessClicker
                 return null;
 
             return _board.MakeMove(move) || _board.MakeObservedMove(move) ? move : null;
+        }
+
+        private string DescribeBoardDetection(
+            IReadOnlyList<(int Rank, int File)> detectedSquares,
+            string candidates,
+            bool isWhiteView)
+        {
+            string[] moves = candidates.Split('|', StringSplitOptions.RemoveEmptyEntries);
+            string legalForTurn = FormatMoveList(moves.Where(IsLegalMove));
+            string legalIgnoringTurn = FormatMoveList(moves.Where(IsLegalMoveIgnoringTurn));
+            return $"Tracked turn: {_board.Turn}; bottom: {(isWhiteView ? "White" : "Black")}; " +
+                $"changed screen cells: {FormatDetectedSquares(detectedSquares, isWhiteView)}; " +
+                $"legal for turn: {legalForTurn}; legal ignoring turn: {legalIgnoringTurn}.";
+        }
+
+        private static string FormatDetectedSquares(
+            IReadOnlyList<(int Rank, int File)> changedSquares,
+            bool isWhiteView)
+        {
+            if (changedSquares.Count == 0)
+                return "none";
+
+            return string.Join(", ", changedSquares.Select(square =>
+                $"r{square.Rank + 1}c{square.File + 1}=" +
+                BoardMouseCoordinates.ScreenCellToSquare(
+                    square.File, square.Rank, isWhiteView)));
+        }
+
+        private static string FormatMoveList(IEnumerable<string> candidateMoves)
+        {
+            string[] moves = candidateMoves
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(10)
+                .ToArray();
+            return moves.Length switch
+            {
+                0 => "none",
+                10 => $"{string.Join(", ", moves.Take(9))} (more...)",
+                _ => string.Join(", ", moves)
+            };
         }
 
         private bool BoardImageStillMatchesTrackedPosition(Bitmap boardImage, bool isWhiteView)

@@ -28,6 +28,27 @@ public sealed class MouseMoveExecutorTests
         Assert.Equal(square, BoardMouseCoordinates.ScreenPointToSquare(new Point(x, y), BoardBounds, whiteView));
     }
 
+    [Theory]
+    [InlineData(true, 0, 0, "a8")]
+    [InlineData(true, 7, 0, "h8")]
+    [InlineData(true, 0, 7, "a1")]
+    [InlineData(true, 7, 7, "h1")]
+    [InlineData(false, 0, 0, "h1")]
+    [InlineData(false, 7, 0, "a1")]
+    [InlineData(false, 0, 7, "h8")]
+    [InlineData(false, 7, 7, "a8")]
+    public void ConvertsScreenCellsToCorrectFilesAndRanks(
+        bool whiteView,
+        int screenFile,
+        int screenRank,
+        string square)
+    {
+        Assert.Equal(square,
+            BoardMouseCoordinates.ScreenCellToSquare(screenFile, screenRank, whiteView));
+        Assert.Equal((screenFile, screenRank),
+            BoardMouseCoordinates.SquareToScreenCell(square, whiteView));
+    }
+
     [Fact]
     public void ExecuteMoveClicksStartAndDestinationThenRestoresCursor()
     {

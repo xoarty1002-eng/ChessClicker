@@ -141,10 +141,12 @@ namespace ChessClicker
         public string? ScanForStateChanges(
             Bitmap currentBoard,
             bool isWhiteView,
+            out IReadOnlyList<(int Rank, int File)> detectedSquares,
             int brightnessThreshold = 18,
             int minimumStableDurationMilliseconds = 0,
             ChessBoard? trackedPosition = null)
         {
+            detectedSquares = Array.Empty<(int Rank, int File)>();
             if (currentBoard == null) return null;
             if (minimumStableDurationMilliseconds < 0)
                 throw new ArgumentOutOfRangeException(nameof(minimumStableDurationMilliseconds));
@@ -183,6 +185,7 @@ namespace ChessClicker
 
             string candidates = BoardMoveDetector.CreateCandidates(
                 changedSquares, isWhiteView, trackedPosition);
+            detectedSquares = changedSquares;
             _previousGridBrightness = currentBrightness;
             ResetPendingChange();
             if (!string.IsNullOrEmpty(candidates))
