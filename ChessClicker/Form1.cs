@@ -353,7 +353,14 @@ namespace ChessClicker
                 DetectBoardOrientation(baseline);
                 if (!_positionInitialized || _startingPositionResetPending)
                 {
-                    _controller.ResetPosition(_settings.StartingPositionFen);
+                    if (!_controller.TryReconstructSingleMoveFromBoard(
+                            baseline, _settings.StartingPositionFen, _isWhiteView, out _))
+                    {
+                        _controller.ResetPosition(_settings.StartingPositionFen);
+                        Log(
+                            "[Position reconstruction] No single quiet move could be confidently matched to the configured starting FEN; loaded that FEN as-is.");
+                    }
+
                     _positionInitialized = true;
                     _startingPositionResetPending = false;
                 }

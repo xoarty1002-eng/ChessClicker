@@ -117,6 +117,25 @@ public sealed class BoardBrightnessAnalyzerTests
         Assert.Equal("e2e4", move);
     }
 
+    [Fact]
+    public void DetectsObservedMoveWhenTrackedTurnDoesNotMatchTheDisplayedMove()
+    {
+        var board = new ChessBoard(
+            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1");
+        IReadOnlyList<(int Rank, int File)> changedSquares = [(6, 4), (4, 4)];
+        string[] candidates = BoardMoveDetector.CreateCandidates(changedSquares, isWhiteView: true)
+            .Split('|');
+
+        string? move = BoardMoveDetector.FindUniqueLegalMove(candidates, candidate =>
+            board.ValidateMoveIgnoringTurn(
+                8 - (candidate[1] - '0'), candidate[0] - 'a',
+                8 - (candidate[3] - '0'), candidate[2] - 'a'));
+
+        Assert.Equal("e2e4", move);
+        Assert.True(board.MakeObservedMove(move!));
+        Assert.Equal("black", board.Turn);
+    }
+
     [Theory]
     [InlineData(true, "e1g1", 7, 4, 7, 6, 7, 7, 7, 5)]
     [InlineData(true, "e1c1", 7, 4, 7, 2, 7, 0, 7, 3)]
