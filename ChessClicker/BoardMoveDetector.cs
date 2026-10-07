@@ -56,6 +56,24 @@ namespace ChessClicker
             return matchingMove;
         }
 
+        public static string? FindUniqueMoveMatchingPosition(
+            ChessBoard position,
+            IReadOnlySet<string> observedOccupiedSquares)
+        {
+            ArgumentNullException.ThrowIfNull(position);
+            ArgumentNullException.ThrowIfNull(observedOccupiedSquares);
+
+            List<(int Rank, int File)> allSquares = new(64);
+            for (int rank = 0; rank < 8; rank++)
+                for (int file = 0; file < 8; file++)
+                    allSquares.Add((rank, file));
+
+            string[] candidates = CreateCandidates(
+                allSquares, isWhiteView: true, position).Split('|');
+            return FindUniqueMoveMatchingOccupiedSquares(
+                candidates, position, observedOccupiedSquares);
+        }
+
         public static string? FindUniqueCheckmatingMove(
             IEnumerable<string> candidates,
             ChessBoard position)

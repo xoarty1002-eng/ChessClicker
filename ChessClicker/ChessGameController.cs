@@ -16,6 +16,7 @@ namespace ChessClicker
         private readonly MoveConfirmation _moveConfirmation = new();
         private CancellationTokenSource _automationCancellation = new();
         private bool _automationActive;
+        private DateTimeOffset _lastIdlePositionAudit;
         private string? _pendingFromSquare;
         private bool? _lastDetectedWhiteView;
         private ChessClickerSettings _settings = ChessClickerSettings.Default;
@@ -24,6 +25,7 @@ namespace ChessClicker
 
         private static readonly TimeSpan MoveConfirmationTimeout = TimeSpan.FromSeconds(8);
         private static readonly TimeSpan BoardStabilityTimeout = TimeSpan.FromSeconds(8);
+        private static readonly TimeSpan IdlePositionAuditInterval = TimeSpan.FromMinutes(1);
         private int _engineTurnCount;
 
         public event Action<string>? StatusChanged;
@@ -40,6 +42,7 @@ namespace ChessClicker
                 _automationCancellation = new CancellationTokenSource();
             }
             _automationActive = true;
+            _lastIdlePositionAudit = DateTimeOffset.UtcNow;
         }
 
         public void StopAutomation()
@@ -88,6 +91,16 @@ namespace ChessClicker
 
         public void ResetPosition(string fen)
         {
+            ResetPosition(fen, checkForGameOver: true);
+        }
+
+        public void ResetPositionForNewGame(string fen)
+        {
+            ResetPosition(fen, checkForGameOver: false);
+        }
+
+        private void ResetPosition(string fen, bool checkForGameOver)
+        {
             if (IsBusy)
                 throw new InvalidOperationException("Cannot reset the tracked position while a move is being processed.");
 
@@ -95,9 +108,11 @@ namespace ChessClicker
             _pendingFromSquare = null;
             _pendingClickedMove = null;
             _moveConfirmation.Cancel();
+            _lastIdlePositionAudit = DateTimeOffset.UtcNow;
             NotifyBoardChanged();
             StatusChanged?.Invoke($"[Position loaded] {_board.Turn} to move.");
-            StopIfGameOver();
+            if (checkForGameOver)
+                StopIfGameOver();
         }
 
         public bool TryReconstructSingleMoveFromBoard(
@@ -159,6 +174,7 @@ namespace ChessClicker
             if (!_board.MakeMove(inferredMove))
                 throw new InvalidOperationException($"Could not apply reconstructed move {inferredMove}.");
 
+            _lastIdlePositionAudit = DateTimeOffset.UtcNow;
             NotifyBoardChanged();
             StatusChanged?.Invoke(
                 $"[Position reconstructed] Detected the opening move {inferredMove}; {_board.Turn} to move.");
@@ -205,6 +221,13 @@ namespace ChessClicker
                             $"{(isWhiteView ? "White" : "Black")}; changed screen cells: " +
                             $"{FormatDetectedSquares(detectedSquares, isWhiteView)}; " +
                             "no move candidates could be generated.");
+                    }
+                    if (await AuditPositionAfterInactivityAsync(bounds, isWhiteView, cancellationToken))
+                    {
+                        if (StopIfGameOver())
+                            return;
+                        if (ShouldEngineMove(isWhiteView))
+                            await RequestEngineMoveCoreAsync(bounds, isWhiteView, cancellationToken);
                     }
                     ExpirePendingClickHint();
                     return;
@@ -270,6 +293,7 @@ namespace ChessClicker
                 }
 
                 NotifyBoardChanged();
+                _lastIdlePositionAudit = DateTimeOffset.UtcNow;
                 StatusChanged?.Invoke(clickedMove == null
                     ? detectedMoveRecoveredTurnMismatch
                         ? $"[Move recovered] Processed {appliedMove} despite the tracked turn mismatch; the tracked position was synchronized."
@@ -334,6 +358,7 @@ namespace ChessClicker
                 throw new InvalidOperationException(
                     $"Move {move} is not legal in the tracked position {_board.Turn} to move.");
 
+            _lastIdlePositionAudit = DateTimeOffset.UtcNow;
             _pendingFromSquare = null;
             _pendingClickedMove = null;
             _moveConfirmation.Cancel();
@@ -674,7 +699,10 @@ namespace ChessClicker
                 return false;
 
             if (_board.MakeMove(confirmedMove))
+            {
+                _lastIdlePositionAudit = DateTimeOffset.UtcNow;
                 return true;
+            }
 
             _moveConfirmation.Expect(confirmedMove);
             StatusChanged?.Invoke(
@@ -694,10 +722,14 @@ namespace ChessClicker
             if (move != null)
             {
                 if (_board.MakeMove(move))
+                {
+                    _lastIdlePositionAudit = DateTimeOffset.UtcNow;
                     return move;
+                }
                 if (_settings.ProcessPossibleLegalTurn && _board.MakeObservedMove(move))
                 {
                     processedPossibleLegalTurn = true;
+                    _lastIdlePositionAudit = DateTimeOffset.UtcNow;
                     return move;
                 }
                 return null;
@@ -705,7 +737,12 @@ namespace ChessClicker
 
             move = BoardMoveDetector.FindUniqueLegalMove(moves, IsLegalMove);
             if (move != null)
-                return _board.MakeMove(move) ? move : null;
+            {
+                if (!_board.MakeMove(move))
+                    return null;
+                _lastIdlePositionAudit = DateTimeOffset.UtcNow;
+                return move;
+            }
 
             if (_settings.ProcessPossibleLegalTurn &&
                 !moves.Any(IsLegalMove))
@@ -714,6 +751,7 @@ namespace ChessClicker
                 if (move != null && _board.MakeObservedMove(move))
                 {
                     processedPossibleLegalTurn = true;
+                    _lastIdlePositionAudit = DateTimeOffset.UtcNow;
                     return move;
                 }
             }
@@ -731,12 +769,99 @@ namespace ChessClicker
                 return null;
 
             if (_board.MakeMove(move))
+            {
+                _lastIdlePositionAudit = DateTimeOffset.UtcNow;
                 return move;
+            }
             if (!_settings.ProcessPossibleLegalTurn || !_board.MakeObservedMove(move))
                 return null;
 
             processedPossibleLegalTurn = true;
+            _lastIdlePositionAudit = DateTimeOffset.UtcNow;
             return move;
+        }
+
+        private async Task<bool> AuditPositionAfterInactivityAsync(
+            Rectangle bounds,
+            bool isWhiteView,
+            CancellationToken cancellationToken)
+        {
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            if (now - _lastIdlePositionAudit < IdlePositionAuditInterval)
+                return false;
+            _lastIdlePositionAudit = now;
+
+            if (!await WaitForStableBoardAsync(bounds, cancellationToken))
+            {
+                StatusChanged?.Invoke(
+                    "[Idle audit] The board did not stabilize; position was not changed. The audit will retry after another minute of inactivity.");
+                return false;
+            }
+
+            using Bitmap stableBoard = CaptureBoard(bounds);
+            _scanner.ResetStateTracking(stableBoard);
+            if (!PieceAppearanceImageSampler.TryExtractOccupiedSquares(
+                    stableBoard, _board, isWhiteView,
+                    out IReadOnlySet<string> observedOccupiedSquares))
+            {
+                StatusChanged?.Invoke(
+                    "[Idle audit] Could not reliably identify occupied squares; tracked position was left unchanged.");
+                return false;
+            }
+
+            HashSet<string> trackedOccupiedSquares = GetTrackedOccupiedSquares();
+            if (trackedOccupiedSquares.SetEquals(observedOccupiedSquares))
+            {
+                StatusChanged?.Invoke(
+                    "[Idle audit] Board still matches the tracked position after one minute of inactivity.");
+                return false;
+            }
+
+            string? move = BoardMoveDetector.FindUniqueMoveMatchingPosition(
+                _board, observedOccupiedSquares);
+            if (move == null)
+            {
+                StatusChanged?.Invoke(
+                    "[Idle audit] Board differs from the tracked position, but no unique legal single move explains it. The tracked position was not changed.");
+                return false;
+            }
+
+            bool moveMatchesTurn = IsLegalMove(move);
+            if (!moveMatchesTurn && !_settings.ProcessPossibleLegalTurn)
+            {
+                StatusChanged?.Invoke(
+                    $"[Idle audit] The board suggests {move}, but it does not match tracked turn {_board.Turn}; turn-mismatch processing is disabled.");
+                return false;
+            }
+
+            bool applied = moveMatchesTurn
+                ? _board.MakeMove(move)
+                : _board.MakeObservedMove(move);
+            if (!applied)
+                throw new InvalidOperationException(
+                    $"The unique idle-audit move {move} could not be applied to the tracked position.");
+
+            NotifyBoardChanged();
+            _lastIdlePositionAudit = DateTimeOffset.UtcNow;
+            StatusChanged?.Invoke(
+                moveMatchesTurn
+                    ? $"[Idle audit] Recovered missed move {move}; tracked position synchronized."
+                    : $"[Idle audit] Recovered missed move {move} despite tracked turn mismatch; position synchronized.");
+            return true;
+        }
+
+        private HashSet<string> GetTrackedOccupiedSquares()
+        {
+            HashSet<string> occupiedSquares = new(StringComparer.Ordinal);
+            for (char file = 'a'; file <= 'h'; file++)
+                for (char rank = '1'; rank <= '8'; rank++)
+                {
+                    string square = $"{file}{rank}";
+                    if (_board.GetPieceAt(square) != ' ')
+                        occupiedSquares.Add(square);
+                }
+
+            return occupiedSquares;
         }
 
         private string DescribeBoardDetection(

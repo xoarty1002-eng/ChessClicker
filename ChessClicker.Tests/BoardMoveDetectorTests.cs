@@ -42,6 +42,24 @@ public sealed class BoardMoveDetectorTests
     }
 
     [Fact]
+    public void RecoversMissedMoveFromCurrentBoardOccupancy()
+    {
+        var trackedPosition = new ChessBoard(ChessBoard.StandardStartingFen);
+        Assert.True(trackedPosition.MakeMove("d2d4"));
+
+        var displayedPosition = new ChessBoard(trackedPosition.GenerateFen());
+        Assert.True(displayedPosition.MakeObservedMove("b7b6"));
+
+        string? detectedMove = BoardMoveDetector.FindUniqueMoveMatchingPosition(
+            trackedPosition, GetOccupiedSquares(displayedPosition));
+
+        Assert.Equal("b7b6", detectedMove);
+        Assert.True(trackedPosition.MakeMove(detectedMove!));
+        Assert.True(GetOccupiedSquares(trackedPosition).SetEquals(
+            GetOccupiedSquares(displayedPosition)));
+    }
+
+    [Fact]
     public void DoesNotGuessWhenNoCandidateMatchesTheObservedOccupancy()
     {
         var position = new ChessBoard(ChessBoard.StandardStartingFen);

@@ -27,6 +27,7 @@ namespace ChessClicker
         private bool _orientationDetected;
         private bool _positionInitialized;
         private bool _startingPositionResetPending;
+        private bool _gameEndedAwaitingBoardReset;
         private DateTime _lastAutoCalibrationAttempt;
         private DesktopMouseHook? _desktopMouseHook;
         private ChessClickerSettings _settings = ChessClickerSettings.Default;
@@ -359,14 +360,27 @@ namespace ChessClicker
                             baseline, _settings.StartingPositionFen, _isWhiteView,
                             out _, out string? reconstructionIssue))
                     {
-                        _controller.ResetPosition(_settings.StartingPositionFen);
-                        Log(reconstructionIssue == null
-                            ? "[Position reconstruction] Board matches the configured FEN; no move was inferred."
-                            : $"[Position reconstruction] {reconstructionIssue} Use Register opponent move or load the current FEN.");
+                        if (_gameEndedAwaitingBoardReset && reconstructionIssue != null)
+                        {
+                            Log(
+                                $"[Play blocked] The game ended, and the visible board does not match " +
+                                $"the configured starting position. Reset the board in the chess game, " +
+                                $"then press Play. {reconstructionIssue}");
+                            return;
+                        }
+
+                        if (!_gameEndedAwaitingBoardReset)
+                        {
+                            _controller.ResetPosition(_settings.StartingPositionFen);
+                            Log(reconstructionIssue == null
+                                ? "[Position reconstruction] Board matches the configured FEN; no move was inferred."
+                                : $"[Position reconstruction] {reconstructionIssue} Use Register opponent move or load the current FEN.");
+                        }
                     }
 
                     _positionInitialized = true;
                     _startingPositionResetPending = false;
+                    _gameEndedAwaitingBoardReset = false;
                 }
 
                 _controller.ResetBoardTracking(baseline);
@@ -415,6 +429,7 @@ namespace ChessClicker
                 _controller.ResetPosition(_settings.StartingPositionFen);
                 _positionInitialized = false;
                 _startingPositionResetPending = true;
+                _gameEndedAwaitingBoardReset = false;
                 Log("[Position reset] Loaded the configured starting FEN. The current board will be reconstructed when Play starts.");
             }
             catch (Exception ex)
@@ -436,6 +451,32 @@ namespace ChessClicker
             _timerGameLoop.Stop();
             playButton.Text = "Play (F2)";
             UpdateStatusLabel();
+            _ = ResetTrackedPositionAfterGameEndAsync();
+        }
+
+        private async Task ResetTrackedPositionAfterGameEndAsync()
+        {
+            _gameEndedAwaitingBoardReset = true;
+            _positionInitialized = false;
+            _startingPositionResetPending = true;
+
+            try
+            {
+                while (_controller.IsBusy && !IsDisposed)
+                    await Task.Delay(50);
+
+                if (IsDisposed)
+                    return;
+
+                _controller.ResetPositionForNewGame(_settings.StartingPositionFen);
+                Log(
+                    "[Game reset] Loaded the configured starting FEN for the next game. " +
+                    "Reset the visible chess board before pressing Play.");
+            }
+            catch (Exception ex)
+            {
+                Log($"[Game reset error] Could not prepare the next game: {ex.Message}");
+            }
         }
 
         private void EnsureBoardOrientationDetected(Bitmap boardImage)
