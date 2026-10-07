@@ -43,6 +43,7 @@ namespace ChessClicker
             playButton.Click += PlayButton_Click;
             settingsButton.Click += btnSettings_Click;
             clickMoveButton.Click += ClickMoveButton_Click;
+            registerOpponentMoveButton.Click += RegisterOpponentMoveButton_Click;
             scanFenButton.Click += ScanFenButton_Click;
             KeyDown += Form1_KeyDown;
             moveInputTextBox.KeyDown += MoveInputTextBox_KeyDown;
@@ -355,25 +356,12 @@ namespace ChessClicker
                 {
                     if (!_controller.TryReconstructSingleMoveFromBoard(
                             baseline, _settings.StartingPositionFen, _isWhiteView,
-                            out _, out string? troubleshootingReason))
+                            out _, out string? reconstructionIssue))
                     {
-                        if (troubleshootingReason != null)
-                        {
-                            using var troubleshooter = new PositionTroubleshooterForm(
-                                _settings.StartingPositionFen, troubleshootingReason);
-                            if (troubleshooter.ShowDialog(this) != DialogResult.OK)
-                            {
-                                Log("[Play] Cancelled from the position troubleshooter.");
-                                return;
-                            }
-
-                            _controller.ResetPosition(troubleshooter.CurrentFen);
-                        }
-                        else
-                        {
-                            _controller.ResetPosition(_settings.StartingPositionFen);
-                        }
-
+                        _controller.ResetPosition(_settings.StartingPositionFen);
+                        Log(reconstructionIssue == null
+                            ? "[Position reconstruction] Board matches the configured FEN; no move was inferred."
+                            : $"[Position reconstruction] {reconstructionIssue} Use Register opponent move or load the current FEN.");
                     }
 
                     _positionInitialized = true;
@@ -462,6 +450,71 @@ namespace ChessClicker
         private void ClickMoveButton_Click(object? sender, EventArgs e)
         {
             _ = SubmitTypedMoveAsync();
+        }
+
+        private void RegisterOpponentMoveButton_Click(object? sender, EventArgs e)
+        {
+            _ = RegisterOpponentMoveAsync();
+        }
+
+        private async Task RegisterOpponentMoveAsync()
+        {
+            ParsedChessPositionInput parsedInput;
+            try
+            {
+                parsedInput = ChessPositionInput.Parse(moveInputTextBox.Text);
+                if (parsedInput.Kind != ChessPositionInputKind.Move)
+                    throw new FormatException("Enter the opponent's move in UCI notation, for example e7e5.");
+            }
+            catch (Exception ex)
+            {
+                Log($"[Opponent move] {ex.Message}");
+                return;
+            }
+
+            if (_controller.IsBusy)
+            {
+                Log("[Opponent move] Wait for the current operation to finish.");
+                return;
+            }
+            if (_activeBoardBounds.Width < 40 || _activeBoardBounds.Height < 40)
+            {
+                Log("[Opponent move] Calibrate the board before registering a move.");
+                return;
+            }
+
+            try
+            {
+                if (!_orientationDetected)
+                {
+                    using Bitmap image = _controller.CaptureBoard(_activeBoardBounds);
+                    DetectBoardOrientation(image);
+                }
+
+                if (!_positionInitialized || _startingPositionResetPending)
+                {
+                    string startFen = BoardPositionReconstructor.TryCorrectStandardStartingTurn(
+                        _settings.StartingPositionFen, out string correctedFen)
+                        ? correctedFen
+                        : _settings.StartingPositionFen;
+                    _controller.ResetPosition(startFen);
+                    _positionInitialized = true;
+                    _startingPositionResetPending = false;
+                }
+
+                using Bitmap currentBoard = await _controller.CaptureStableBoardAsync(_activeBoardBounds);
+                string registeredMove = _controller.RegisterObservedMove(parsedInput.Value);
+                _controller.ResetBoardTracking(currentBoard);
+                SetPreview(currentBoard);
+                moveInputTextBox.Clear();
+                if (_timerGameLoop.Enabled)
+                    _ = _controller.RequestEngineMoveAsync(_activeBoardBounds, _isWhiteView);
+                Log($"[Opponent move] Registered {registeredMove}; the detected mover is based on its source piece.");
+            }
+            catch (Exception ex)
+            {
+                Log($"[Opponent move error] {ex.Message}");
+            }
         }
 
         private async Task SubmitTypedMoveAsync()

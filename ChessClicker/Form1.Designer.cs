@@ -13,6 +13,7 @@ namespace ChessClicker
         private Label statusLabel = null!;
         private TextBox moveInputTextBox = null!;
         private Button clickMoveButton = null!;
+        private Button registerOpponentMoveButton = null!;
 
         protected override void Dispose(bool disposing)
         {
@@ -35,6 +36,7 @@ namespace ChessClicker
             statusLabel = new Label();
             moveInputTextBox = new TextBox();
             clickMoveButton = new Button();
+            registerOpponentMoveButton = new Button();
             var root = new TableLayoutPanel();
             var footer = new TableLayoutPanel();
             var buttons = new FlowLayoutPanel();
@@ -61,7 +63,7 @@ namespace ChessClicker
             footer.ColumnCount = 1;
             footer.RowCount = 4;
             footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
-            footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
+            footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 102));
             footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
             footer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
@@ -100,9 +102,10 @@ namespace ChessClicker
             moveInputTextBox.PlaceholderText = "Enter UCI move (e2e4) or full FEN";
             inputActions.Dock = DockStyle.Fill;
             inputActions.ColumnCount = 1;
-            inputActions.RowCount = 2;
-            inputActions.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
-            inputActions.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+            inputActions.RowCount = 3;
+            inputActions.RowStyles.Add(new RowStyle(SizeType.Percent, 34));
+            inputActions.RowStyles.Add(new RowStyle(SizeType.Percent, 33));
+            inputActions.RowStyles.Add(new RowStyle(SizeType.Percent, 33));
             clickMoveButton.Text = "Analyze / Click (F3)";
             clickMoveButton.Dock = DockStyle.Fill;
             clickMoveButton.Margin = new Padding(4, 0, 0, 2);
@@ -110,8 +113,13 @@ namespace ChessClicker
             ConfigureButton(scanFenButton, "Scan FEN");
             scanFenButton.Dock = DockStyle.Fill;
             scanFenButton.Margin = new Padding(4, 2, 0, 0);
+            ConfigureButton(registerOpponentMoveButton, "Register opponent move");
+            registerOpponentMoveButton.Dock = DockStyle.Fill;
+            registerOpponentMoveButton.Height = 28;
+            registerOpponentMoveButton.Margin = new Padding(4, 2, 0, 0);
             inputActions.Controls.Add(clickMoveButton, 0, 0);
             inputActions.Controls.Add(scanFenButton, 0, 1);
+            inputActions.Controls.Add(registerOpponentMoveButton, 0, 2);
             inputPanel.Controls.Add(moveInputTextBox, 0, 0);
             inputPanel.Controls.Add(inputActions, 1, 0);
 

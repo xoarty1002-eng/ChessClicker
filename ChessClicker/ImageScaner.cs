@@ -142,7 +142,8 @@ namespace ChessClicker
             Bitmap currentBoard,
             bool isWhiteView,
             int brightnessThreshold = 18,
-            int minimumStableDurationMilliseconds = 0)
+            int minimumStableDurationMilliseconds = 0,
+            ChessBoard? trackedPosition = null)
         {
             if (currentBoard == null) return null;
             if (minimumStableDurationMilliseconds < 0)
@@ -180,7 +181,8 @@ namespace ChessClicker
             if (!PendingChangeHasSettled(minimumStableDurationMilliseconds))
                 return null;
 
-            string candidates = BoardMoveDetector.CreateCandidates(changedSquares, isWhiteView);
+            string candidates = BoardMoveDetector.CreateCandidates(
+                changedSquares, isWhiteView, trackedPosition);
             _previousGridBrightness = currentBrightness;
             ResetPendingChange();
             if (!string.IsNullOrEmpty(candidates))

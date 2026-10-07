@@ -118,6 +118,22 @@ public sealed class BoardBrightnessAnalyzerTests
     }
 
     [Fact]
+    public void GeneratesMoveOriginsOnlyFromChangedSquaresContainingPieces()
+    {
+        var board = new ChessBoard(ChessBoard.StandardStartingFen);
+        IReadOnlyList<(int Rank, int File)> changedSquares =
+            [(6, 4), (4, 4), (5, 2)];
+
+        string[] candidates = BoardMoveDetector.CreateCandidates(
+            changedSquares, isWhiteView: true, board).Split('|');
+
+        Assert.Contains("e2e4", candidates);
+        Assert.DoesNotContain(candidates, move => move.StartsWith("e4", StringComparison.Ordinal));
+        Assert.DoesNotContain(candidates, move => move.StartsWith("c3", StringComparison.Ordinal));
+        Assert.Contains("e2c3", candidates);
+    }
+
+    [Fact]
     public void DetectsObservedMoveWhenTrackedTurnDoesNotMatchTheDisplayedMove()
     {
         var board = new ChessBoard(

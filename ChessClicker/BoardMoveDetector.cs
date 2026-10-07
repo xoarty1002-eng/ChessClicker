@@ -21,7 +21,10 @@ namespace ChessClicker
             return legalMoves.Length == 1 ? legalMoves[0] : null;
         }
 
-        public static string CreateCandidates(IReadOnlyList<(int Rank, int File)> changedSquares, bool isWhiteView)
+        public static string CreateCandidates(
+            IReadOnlyList<(int Rank, int File)> changedSquares,
+            bool isWhiteView,
+            ChessBoard? position = null)
         {
             ArgumentNullException.ThrowIfNull(changedSquares);
             HashSet<string> squares = new(StringComparer.Ordinal);
@@ -42,9 +45,14 @@ namespace ChessClicker
             string[] orderedSquares = squares.ToArray();
             List<string> candidates = new(orderedSquares.Length * Math.Max(0, orderedSquares.Length - 1));
             for (int from = 0; from < orderedSquares.Length; from++)
+            {
+                if (position != null && position.GetPieceAt(orderedSquares[from]) == ' ')
+                    continue;
+
                 for (int to = 0; to < orderedSquares.Length; to++)
                     if (from != to)
                         candidates.Add(orderedSquares[from] + orderedSquares[to]);
+            }
 
             return string.Join('|', candidates);
         }

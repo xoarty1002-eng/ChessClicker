@@ -102,7 +102,7 @@ namespace ChessClicker
             string startingFen,
             bool isWhiteView,
             out string? inferredMove,
-            out string? troubleshootingReason)
+            out string? reconstructionIssue)
         {
             ArgumentNullException.ThrowIfNull(boardImage);
             ArgumentException.ThrowIfNullOrWhiteSpace(startingFen);
@@ -110,7 +110,7 @@ namespace ChessClicker
                 throw new InvalidOperationException("Cannot reconstruct the position while a move is being processed.");
 
             inferredMove = null;
-            troubleshootingReason = null;
+            reconstructionIssue = null;
             string activeStartingFen = startingFen;
             bool correctedStartingTurn =
                 BoardPositionReconstructor.TryCorrectStandardStartingTurn(startingFen, out string whiteToMoveFen);
@@ -121,7 +121,7 @@ namespace ChessClicker
             if (!PieceAppearanceImageSampler.TryExtractOccupiedSquares(
                     boardImage, startingPosition, isWhiteView, out IReadOnlySet<string> occupiedSquares))
             {
-                troubleshootingReason =
+                reconstructionIssue =
                     "The board image did not provide a clear enough distinction between pieces and empty squares.";
                 return false;
             }
@@ -140,9 +140,9 @@ namespace ChessClicker
                     }
 
                 if (!configuredOccupiedSquares.SetEquals(occupiedSquares))
-                    troubleshootingReason =
+                    reconstructionIssue =
                         "The observed board differs from the configured starting FEN, but no single legal quiet move could be identified.";
-                if (correctedStartingTurn && troubleshootingReason == null)
+                if (correctedStartingTurn && reconstructionIssue == null)
                 {
                     ResetPosition(activeStartingFen);
                     StatusChanged?.Invoke(
@@ -187,7 +187,8 @@ namespace ChessClicker
                     boardImage,
                     isWhiteView,
                     _settings.BrightnessThreshold,
-                    _settings.StableBoardDurationMilliseconds);
+                    _settings.StableBoardDurationMilliseconds,
+                    _board);
                 if (string.IsNullOrEmpty(candidates))
                 {
                     ExpirePendingClickHint();
@@ -277,6 +278,31 @@ namespace ChessClicker
             _pendingClickedMove = move;
             _pendingClickedMoveAt = DateTimeOffset.UtcNow;
             StatusChanged?.Invoke($"[Click observed] Waiting for the board to confirm {move}.");
+        }
+
+        public string RegisterObservedMove(string move)
+        {
+            if (IsBusy)
+                throw new InvalidOperationException("Wait for the current operation before registering an opponent move.");
+
+            move = ChessMoveNotation.Normalize(move);
+            char piece = _board.GetPieceAt(move[..2]);
+            if (piece == ' ')
+                throw new InvalidOperationException($"There is no piece on {move[..2]}.");
+
+            bool applied = _board.MakeMove(move) || _board.MakeObservedMove(move);
+            if (!applied)
+                throw new InvalidOperationException(
+                    $"Move {move} is not legal in the tracked position {_board.Turn} to move.");
+
+            _pendingFromSquare = null;
+            _pendingClickedMove = null;
+            _moveConfirmation.Cancel();
+            string mover = char.IsUpper(piece) ? "White" : "Black";
+            NotifyBoardChanged();
+            StatusChanged?.Invoke(
+                $"[Opponent move registered] {mover} played {move}; {_board.Turn} to move.");
+            return move;
         }
 
         public async Task RequestEngineMoveAsync(Rectangle bounds, bool isWhiteView)
@@ -469,7 +495,8 @@ namespace ChessClicker
                     currentBoard,
                     isWhiteView,
                     _settings.BrightnessThreshold,
-                    _settings.StableBoardDurationMilliseconds);
+                    _settings.StableBoardDurationMilliseconds,
+                    _board);
                 if (string.IsNullOrEmpty(candidates))
                     continue;
 
