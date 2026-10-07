@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -192,6 +193,14 @@ namespace ChessClicker
                 if (string.IsNullOrEmpty(candidates))
                 {
                     ExpirePendingClickHint();
+                    return;
+                }
+
+                if (BoardImageStillMatchesTrackedPosition(boardImage, isWhiteView))
+                {
+                    _scanner.ResetStateTracking(boardImage);
+                    StatusChanged?.Invoke(
+                        "[Move ignored] Square highlights changed, but piece occupancy still matches the tracked position.");
                     return;
                 }
 
@@ -472,6 +481,13 @@ namespace ChessClicker
             using Bitmap baseline = CaptureBoard(bounds);
             _scanner.ResetStateTracking(baseline);
             _moveConfirmation.Expect(move);
+            Point fromPoint = BoardMouseCoordinates.SquareCenter(move[..2], bounds, isWhiteView);
+            Point toPoint = BoardMouseCoordinates.SquareCenter(move.Substring(2, 2), bounds, isWhiteView);
+            StatusChanged?.Invoke(
+                $"[Click targets] {move[..2]}=({fromPoint.X},{fromPoint.Y}), " +
+                $"{move.Substring(2, 2)}=({toPoint.X},{toPoint.Y}); board crop " +
+                $"({bounds.X},{bounds.Y},{bounds.Width}x{bounds.Height}), " +
+                $"bottom {(isWhiteView ? "White" : "Black")}.");
             try
             {
                 _clicker.ExecuteMoveOnScreen(move, bounds, isWhiteView);
@@ -500,6 +516,12 @@ namespace ChessClicker
                 if (string.IsNullOrEmpty(candidates))
                     continue;
 
+                if (BoardImageStillMatchesTrackedPosition(currentBoard, isWhiteView))
+                {
+                    _scanner.ResetStateTracking(currentBoard);
+                    continue;
+                }
+
                 if (ConfirmEngineMove(candidates))
                 {
                     NotifyBoardChanged();
@@ -527,8 +549,27 @@ namespace ChessClicker
 
             _moveConfirmation.Cancel();
             _scanner.ResetStateTracking(baseline);
+            using Bitmap finalBoard = CaptureBoard(bounds);
+            IReadOnlyList<(int Rank, int File)> changedSquares =
+                BoardBrightnessAnalyzer.FindChangedSquares(
+                    _scanner.ExtractGridBrightness(baseline),
+                    _scanner.ExtractGridBrightness(finalBoard),
+                    _settings.BrightnessThreshold);
+            string changedSquareList = string.Join(
+                ", ",
+                changedSquares.Select(square =>
+                {
+                    char file = isWhiteView
+                        ? (char)('a' + square.File)
+                        : (char)('h' - square.File);
+                    int rank = isWhiteView ? 8 - square.Rank : 1 + square.Rank;
+                    return $"{file}{rank}";
+                }));
             StatusChanged?.Invoke(
-                $"[Move not confirmed] {move} was sent, but no matching board change appeared within {MoveConfirmationTimeout.TotalSeconds:0} seconds. The tracked position was not advanced; scanning remains armed to detect a delayed board update.");
+                $"[Move not confirmed] {move} was sent, but no matching move appeared within " +
+                $"{MoveConfirmationTimeout.TotalSeconds:0} seconds. Changed crop squares: " +
+                $"{(changedSquareList.Length == 0 ? "none" : changedSquareList)}. " +
+                $"Verify the crop and click targets in the log. The tracked position was not advanced.");
         }
 
         private async Task<bool> WaitForStableBoardAsync(Rectangle bounds, CancellationToken cancellationToken)
@@ -604,6 +645,26 @@ namespace ChessClicker
 
             move = BoardMoveDetector.FindUniqueLegalMove(moves, IsLegalMoveIgnoringTurn);
             return move != null && _board.MakeObservedMove(move) ? move : null;
+        }
+
+        private bool BoardImageStillMatchesTrackedPosition(Bitmap boardImage, bool isWhiteView)
+        {
+            if (!PieceAppearanceImageSampler.TryExtractOccupiedSquares(
+                    boardImage, _board, isWhiteView, out IReadOnlySet<string> observedSquares))
+                return false;
+
+            HashSet<string> trackedSquares = new(StringComparer.Ordinal);
+            for (char file = 'a'; file <= 'h'; file++)
+            {
+                for (char rank = '1'; rank <= '8'; rank++)
+                {
+                    string square = $"{file}{rank}";
+                    if (_board.GetPieceAt(square) != ' ')
+                        trackedSquares.Add(square);
+                }
+            }
+
+            return trackedSquares.SetEquals(observedSquares);
         }
 
         private bool IsLegalMove(string move)
