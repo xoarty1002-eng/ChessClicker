@@ -327,7 +327,7 @@ namespace ChessClicker
 
             if (_timerGameLoop.Enabled)
             {
-                StopPlaying();
+                StopPlaying(resetTrackedPosition: true);
                 return;
             }
 
@@ -390,13 +390,37 @@ namespace ChessClicker
             }
         }
 
-        private void StopPlaying()
+        private void StopPlaying(bool resetTrackedPosition = false)
         {
+            bool wasPlaying = _timerGameLoop.Enabled;
             _timerGameLoop.Stop();
             _controller.StopAutomation();
             playButton.Text = "Play (F2)";
             UpdateStatusLabel();
             Log("[Play] Stopped.");
+            if (resetTrackedPosition && wasPlaying)
+                _ = ResetTrackedPositionAfterStopAsync();
+        }
+
+        private async Task ResetTrackedPositionAfterStopAsync()
+        {
+            try
+            {
+                while (_controller.IsBusy && !IsDisposed)
+                    await Task.Delay(50);
+
+                if (IsDisposed)
+                    return;
+
+                _controller.ResetPosition(_settings.StartingPositionFen);
+                _positionInitialized = false;
+                _startingPositionResetPending = true;
+                Log("[Position reset] Loaded the configured starting FEN. The current board will be reconstructed when Play starts.");
+            }
+            catch (Exception ex)
+            {
+                Log($"[Position reset error] Could not reset the tracked position: {ex.Message}");
+            }
         }
 
         private void Controller_GameEnded()
