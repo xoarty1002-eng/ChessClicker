@@ -34,8 +34,10 @@ namespace ChessClicker
                 return false;
             }
 
+            int minimumPieceCount = Math.Max(1, pieceCount - 1);
             if (!PieceOccupancyAnalyzer.TrySelectOccupiedSquares(
-                    scores, pieceCount, minimumSeparation: 8, out bool[,] screenOccupancy))
+                    scores, minimumPieceCount, pieceCount,
+                    minimumSeparation: 8, out bool[,] screenOccupancy))
             {
                 occupiedSquares = new HashSet<string>(StringComparer.Ordinal);
                 return false;
@@ -49,9 +51,13 @@ namespace ChessClicker
                     if (!screenOccupancy[screenRank, screenFile])
                         continue;
 
+                    int left = screenFile * boardImage.Width / 8;
+                    int right = (screenFile + 1) * boardImage.Width / 8;
+                    int top = screenRank * boardImage.Height / 8;
+                    int bottom = (screenRank + 1) * boardImage.Height / 8;
                     Point center = new(
-                        screenFile * boardImage.Width / 8 + boardImage.Width / 16,
-                        screenRank * boardImage.Height / 8 + boardImage.Height / 16);
+                        left + (right - left) / 2,
+                        top + (bottom - top) / 2);
                     detectedSquares.Add(BoardMouseCoordinates.ScreenPointToSquare(
                         center, new Rectangle(0, 0, boardImage.Width, boardImage.Height), isWhiteView));
                 }

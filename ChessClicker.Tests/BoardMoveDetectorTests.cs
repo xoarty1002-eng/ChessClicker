@@ -93,6 +93,27 @@ public sealed class BoardMoveDetectorTests
         Assert.True(position.Checkmate);
     }
 
+    [Theory]
+    [InlineData("c1h6")]
+    [InlineData("f1a6")]
+    [InlineData("c8h3")]
+    public void DetectsLongDiagonalBishopMoves(string move)
+    {
+        ChessBoard position = move switch
+        {
+            "c1h6" => new("4k3/8/8/8/8/8/8/2B1K3 w - - 0 1"),
+            "f1a6" => new("4k3/8/8/8/8/8/8/4KB2 w - - 0 1"),
+            "c8h3" => new("2b1k3/8/8/8/8/8/8/4K3 b - - 0 1"),
+            _ => throw new ArgumentOutOfRangeException(nameof(move))
+        };
+
+        string[] candidates = [move, "e1e3"];
+        string? detectedMove = BoardMoveDetector.FindUniqueLegalMove(
+            candidates, candidate => IsLegalMove(position, candidate));
+
+        Assert.Equal(move, detectedMove);
+    }
+
     [Fact]
     public void DetectsTheRookMateShownInTheWindowsScreenshot()
     {

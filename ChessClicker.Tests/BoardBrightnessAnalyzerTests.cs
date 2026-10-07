@@ -40,6 +40,27 @@ public sealed class BoardBrightnessAnalyzerTests
     }
 
     [Fact]
+    public void SelectsOccupiedSquaresAfterACaptureWhenPieceCountDecreasesByOne()
+    {
+        double[,] scores = new double[8, 8];
+        for (int index = 0; index < 31; index++)
+            scores[index / 8, index % 8] = 40;
+        scores[3, 7] = 10;
+        scores[4, 0] = 0;
+
+        Assert.True(PieceOccupancyAnalyzer.TrySelectOccupiedSquares(
+            scores,
+            minimumOccupiedSquareCount: 31,
+            maximumOccupiedSquareCount: 32,
+            minimumSeparation: 8,
+            out bool[,] occupied));
+
+        Assert.Equal(31, occupied.Cast<bool>().Count(value => value));
+        Assert.True(occupied[3, 6]);
+        Assert.False(occupied[3, 7]);
+    }
+
+    [Fact]
     public void FindsUniqueLegalMoveAmongEveryOrderedPairFromAllCells()
     {
         var allSquares = new List<(int Rank, int File)>();
