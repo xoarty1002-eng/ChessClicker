@@ -26,6 +26,7 @@ namespace ChessClicker
         private static readonly TimeSpan MoveConfirmationTimeout = TimeSpan.FromSeconds(8);
         private static readonly TimeSpan BoardStabilityTimeout = TimeSpan.FromSeconds(8);
         private static readonly TimeSpan IdlePositionAuditInterval = TimeSpan.FromMinutes(1);
+        private static readonly TimeSpan AmbiguousMoveStableDuration = TimeSpan.FromMilliseconds(1500);
         private int _engineTurnCount;
 
         public event Action<string>? StatusChanged;
@@ -182,6 +183,50 @@ namespace ChessClicker
             return true;
         }
 
+        private async Task<(string? Move, bool RecoveredTurnMismatch)>
+            RetryAmbiguousMoveAfterAnimationAsync(
+                string candidates,
+                Rectangle bounds,
+                bool isWhiteView,
+                CancellationToken cancellationToken)
+        {
+            int requiredMilliseconds = Math.Max(
+                _settings.StableBoardDurationMilliseconds,
+                (int)AmbiguousMoveStableDuration.TotalMilliseconds);
+            StatusChanged?.Invoke(
+                $"[Move detection] Multiple legal moves remain; waiting for the board to stay stable for {requiredMilliseconds} ms before retrying.");
+
+            TimeSpan requiredStability = TimeSpan.FromMilliseconds(requiredMilliseconds);
+            if (!await WaitForStableBoardAsync(bounds, cancellationToken, requiredStability))
+            {
+                StatusChanged?.Invoke(
+                    "[Move detection] The board did not settle after the longer animation wait; no ambiguous move was applied.");
+                return (null, false);
+            }
+
+            using Bitmap stableBoard = CaptureBoard(bounds);
+            _scanner.ResetStateTracking(stableBoard);
+            if (BoardImageStillMatchesTrackedPosition(stableBoard, isWhiteView))
+                return (null, false);
+
+            return (
+                ApplyDetectedMove(
+                    candidates, stableBoard, isWhiteView, out bool recoveredTurnMismatch),
+                recoveredTurnMismatch);
+        }
+
+        private bool HasMultipleLegalMoveCandidates(string candidates)
+        {
+            string[] moves = candidates.Split('|', StringSplitOptions.RemoveEmptyEntries);
+            int legalCount = moves.Count(IsLegalMove);
+            if (legalCount > 1)
+                return true;
+
+            return _settings.ProcessPossibleLegalTurn &&
+                !moves.Any(IsLegalMove) &&
+                moves.Count(IsLegalMoveIgnoringTurn) > 1;
+        }
+
         public bool DetectWhiteView(Bitmap boardImage)
         {
             bool isWhiteView = _scanner.DetectPlayerSideFromImage(boardImage);
@@ -216,6 +261,24 @@ namespace ChessClicker
                 {
                     if (detectedSquares.Count > 0)
                     {
+                        string? occupancyDetectedMove = ApplyDetectedMove(
+                            string.Empty, boardImage, isWhiteView,
+                            out bool recoveredTurnMismatch);
+                        if (occupancyDetectedMove != null)
+                        {
+                            NotifyBoardChanged();
+                            _lastIdlePositionAudit = DateTimeOffset.UtcNow;
+                            StatusChanged?.Invoke(
+                                recoveredTurnMismatch
+                                    ? $"[Move recovered] Detected {occupancyDetectedMove} from full-board piece occupancy despite the tracked turn mismatch."
+                                    : $"[Move confirmed] Detected {occupancyDetectedMove} from full-board piece occupancy.");
+                            if (StopIfGameOver())
+                                return;
+                            if (ShouldEngineMove(isWhiteView))
+                                await RequestEngineMoveCoreAsync(bounds, isWhiteView, cancellationToken);
+                            return;
+                        }
+
                         StatusChanged?.Invoke(
                             $"[Board detection] Tracked turn: {_board.Turn}; bottom: " +
                             $"{(isWhiteView ? "White" : "Black")}; changed screen cells: " +
@@ -247,7 +310,7 @@ namespace ChessClicker
 
                 if (_moveConfirmation.PendingMove is string pendingMove)
                 {
-                    if (ConfirmEngineMove(candidates))
+                    if (ConfirmEngineMove(candidates, boardImage, isWhiteView))
                     {
                         NotifyBoardChanged();
                         StatusChanged?.Invoke($"[Move confirmed] {pendingMove} was detected on the board.");
@@ -260,6 +323,12 @@ namespace ChessClicker
                         _moveConfirmation.Cancel();
                         string? observedMove = ApplyDetectedMove(
                             candidates, boardImage, isWhiteView, out bool pendingMoveRecoveredTurnMismatch);
+                        if (observedMove == null && HasMultipleLegalMoveCandidates(candidates))
+                        {
+                            (observedMove, pendingMoveRecoveredTurnMismatch) =
+                                await RetryAmbiguousMoveAfterAnimationAsync(
+                                    candidates, bounds, isWhiteView, cancellationToken);
+                        }
                         if (observedMove == null)
                         {
                             _moveConfirmation.Expect(pendingMove);
@@ -283,6 +352,13 @@ namespace ChessClicker
 
                 string? appliedMove = ApplyDetectedMove(
                     candidates, boardImage, isWhiteView, out bool detectedMoveRecoveredTurnMismatch);
+                if (appliedMove == null && HasMultipleLegalMoveCandidates(candidates))
+                {
+                    (appliedMove, detectedMoveRecoveredTurnMismatch) =
+                        await RetryAmbiguousMoveAfterAnimationAsync(
+                            candidates, bounds, isWhiteView, cancellationToken);
+                }
+
                 string? clickedMove = _pendingClickedMove;
                 _pendingClickedMove = null;
                 if (appliedMove == null)
@@ -372,6 +448,19 @@ namespace ChessClicker
 
         public async Task RequestEngineMoveAsync(Rectangle bounds, bool isWhiteView)
         {
+            await RequestEngineMoveAsync(bounds, isWhiteView, forceCurrentTurn: false);
+        }
+
+        public async Task RequestEngineMoveOnCurrentTurnAsync(Rectangle bounds, bool isWhiteView)
+        {
+            await RequestEngineMoveAsync(bounds, isWhiteView, forceCurrentTurn: true);
+        }
+
+        private async Task RequestEngineMoveAsync(
+            Rectangle bounds,
+            bool isWhiteView,
+            bool forceCurrentTurn)
+        {
             if (IsBusy) return;
             if (_moveConfirmation.PendingMove != null)
             {
@@ -380,7 +469,7 @@ namespace ChessClicker
                 return;
             }
 
-            if (!ShouldEngineMove(isWhiteView))
+            if (!forceCurrentTurn && !ShouldEngineMove(isWhiteView))
             {
                 bool engineIsWhite = ChessSideSelection.IsWhiteAtScreenSide(
                     isWhiteView, _settings.EngineSide);
@@ -391,12 +480,17 @@ namespace ChessClicker
                 return;
             }
 
+            if (forceCurrentTurn)
+                StatusChanged?.Invoke(
+                    $"[Engine] Registering a move triggered a reply for {_board.Turn}, " +
+                    "regardless of the configured engine side.");
+
             IsBusy = true;
             CancellationToken cancellationToken = _automationCancellation.Token;
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (ShouldEngineMove(isWhiteView))
+                if (forceCurrentTurn || ShouldEngineMove(isWhiteView))
                     await RequestEngineMoveCoreAsync(bounds, isWhiteView, cancellationToken);
             }
             catch (OperationCanceledException)
@@ -574,6 +668,19 @@ namespace ChessClicker
                     _board);
                 if (string.IsNullOrEmpty(candidates))
                 {
+                    if (detectedSquares.Count > 0 &&
+                        ConfirmEngineMove(string.Empty, currentBoard, isWhiteView))
+                    {
+                        NotifyBoardChanged();
+                        StatusChanged?.Invoke(
+                            $"[Move confirmed] {move} was detected from full-board piece occupancy.");
+                        if (StopIfGameOver())
+                            return;
+                        if (continueGame && _automationActive && ShouldEngineMove(isWhiteView))
+                            await RequestEngineMoveCoreAsync(bounds, isWhiteView, cancellationToken);
+                        return;
+                    }
+
                     if (detectedSquares.Count > 0)
                     {
                         StatusChanged?.Invoke(
@@ -595,7 +702,7 @@ namespace ChessClicker
                     continue;
                 }
 
-                if (ConfirmEngineMove(candidates))
+                if (ConfirmEngineMove(candidates, currentBoard, isWhiteView))
                 {
                     NotifyBoardChanged();
                     StatusChanged?.Invoke($"[Move confirmed] {move} was detected on the board.");
@@ -609,6 +716,13 @@ namespace ChessClicker
                 _moveConfirmation.Cancel();
                 string? observedMove = ApplyDetectedMove(
                     candidates, currentBoard, isWhiteView, out bool recoveredTurnMismatch);
+                if (observedMove == null && HasMultipleLegalMoveCandidates(candidates))
+                {
+                    (observedMove, recoveredTurnMismatch) =
+                        await RetryAmbiguousMoveAfterAnimationAsync(
+                            candidates, bounds, isWhiteView, cancellationToken);
+                }
+
                 if (observedMove != null)
                 {
                     NotifyBoardChanged();
@@ -649,13 +763,17 @@ namespace ChessClicker
                 $"The tracked position ({_board.Turn} to move) was not advanced.");
         }
 
-        private async Task<bool> WaitForStableBoardAsync(Rectangle bounds, CancellationToken cancellationToken)
+        private async Task<bool> WaitForStableBoardAsync(
+            Rectangle bounds,
+            CancellationToken cancellationToken,
+            TimeSpan? requiredStableDuration = null)
         {
-            TimeSpan stabilityTimeout = BoardStabilityTimeout +
+            TimeSpan stableDuration = requiredStableDuration ??
                 TimeSpan.FromMilliseconds(_settings.StableBoardDurationMilliseconds);
+            TimeSpan stabilityTimeout = BoardStabilityTimeout + stableDuration;
             var stabilityTracker = new BoardStabilityTracker(
                 requiredStableFrames: 2,
-                requiredStableDuration: TimeSpan.FromMilliseconds(_settings.StableBoardDurationMilliseconds));
+                requiredStableDuration: stableDuration);
             DateTime deadline = DateTime.UtcNow + stabilityTimeout;
             int intervalMilliseconds = Math.Max(1, 1000 / _settings.FramesPerSecond);
 
@@ -710,6 +828,42 @@ namespace ChessClicker
             return false;
         }
 
+        private bool ConfirmEngineMove(
+            string candidates,
+            Bitmap boardImage,
+            bool isWhiteView)
+        {
+            if (ConfirmEngineMove(candidates))
+                return true;
+
+            if (_moveConfirmation.PendingMove is not string pendingMove ||
+                !PieceAppearanceImageSampler.TryExtractOccupiedSquares(
+                    boardImage, _board, isWhiteView,
+                    out IReadOnlySet<string> observedOccupiedSquares))
+                return false;
+
+            string? occupancyMove = BoardMoveDetector.FindUniqueMoveMatchingPosition(
+                _board, observedOccupiedSquares);
+            if (!string.Equals(
+                    occupancyMove, pendingMove, StringComparison.OrdinalIgnoreCase) ||
+                !_moveConfirmation.TryConfirm(occupancyMove, out string? confirmedMove) ||
+                confirmedMove == null)
+                return false;
+
+            if (_board.MakeMove(confirmedMove))
+            {
+                _lastIdlePositionAudit = DateTimeOffset.UtcNow;
+                StatusChanged?.Invoke(
+                    $"[Move verification] Confirmed {confirmedMove} by comparing full-board piece occupancy.");
+                return true;
+            }
+
+            _moveConfirmation.Expect(confirmedMove);
+            StatusChanged?.Invoke(
+                $"[Synchronization error] Occupancy matched {confirmedMove}, but it is not legal for {_board.Turn} to move.");
+            return false;
+        }
+
         private string? ApplyDetectedMove(
             string candidates,
             Bitmap boardImage,
@@ -717,7 +871,7 @@ namespace ChessClicker
             out bool processedPossibleLegalTurn)
         {
             processedPossibleLegalTurn = false;
-            string[] moves = candidates.Split('|');
+            string[] moves = candidates.Split('|', StringSplitOptions.RemoveEmptyEntries);
             string? move = BoardMoveDetector.FindUniqueCheckmatingMove(moves, _board);
             if (move != null)
             {
@@ -762,6 +916,8 @@ namespace ChessClicker
 
             move = BoardMoveDetector.FindUniqueMoveMatchingOccupiedSquares(
                 moves, _board, observedOccupiedSquares);
+            move ??= BoardMoveDetector.FindUniqueMoveMatchingPosition(
+                _board, observedOccupiedSquares);
             if (move == null)
                 return null;
 

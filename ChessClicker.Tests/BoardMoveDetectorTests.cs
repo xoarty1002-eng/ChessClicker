@@ -21,6 +21,26 @@ public sealed class BoardMoveDetectorTests
         Assert.Equal(expectedMove, detectedMove);
     }
 
+    [Theory]
+    [InlineData("f3h4")]
+    [InlineData("f3e5")]
+    public void DisambiguatesTwoLegalKnightMovesUsingFinalBoardOccupancy(string expectedMove)
+    {
+        var position = new ChessBoard(
+            "rnbqk1nr/pppp1ppp/8/4p3/Pb6/5N2/2PPPPPP/RNBQKB1R b KQkq - 1 3");
+        Assert.True(position.MakeMove("e5e4"));
+
+        var displayedPosition = new ChessBoard(position.GenerateFen());
+        Assert.True(displayedPosition.MakeMove(expectedMove));
+
+        string? detectedMove = BoardMoveDetector.FindUniqueMoveMatchingOccupiedSquares(
+            ["f3h4", "f3e5"],
+            position,
+            GetOccupiedSquares(displayedPosition));
+
+        Assert.Equal(expectedMove, detectedMove);
+    }
+
     [Fact]
     public void FindsUniqueLegalMoveWhenTrackedTurnIsWrong()
     {
@@ -110,6 +130,24 @@ public sealed class BoardMoveDetectorTests
         string[] candidates = [move, "e1e3"];
         string? detectedMove = BoardMoveDetector.FindUniqueLegalMove(
             candidates, candidate => IsLegalMove(position, candidate));
+
+        Assert.Equal(move, detectedMove);
+    }
+
+    [Theory]
+    [InlineData("c1h6", "4k3/8/8/8/8/8/8/2B1K3 w - - 0 1")]
+    [InlineData("f1a6", "4k3/8/8/8/8/8/8/4KB2 w - - 0 1")]
+    [InlineData("c8h3", "2b1k3/8/8/8/8/8/8/4K3 b - - 0 1")]
+    public void FindsBishopMoveFromWholeBoardWhenChangedSquaresDoNotGenerateCandidates(
+        string move,
+        string trackedFen)
+    {
+        var trackedPosition = new ChessBoard(trackedFen);
+        var displayedPosition = new ChessBoard(trackedFen);
+        Assert.True(displayedPosition.MakeMove(move));
+
+        string? detectedMove = BoardMoveDetector.FindUniqueMoveMatchingPosition(
+            trackedPosition, GetOccupiedSquares(displayedPosition));
 
         Assert.Equal(move, detectedMove);
     }

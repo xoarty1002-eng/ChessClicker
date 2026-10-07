@@ -588,9 +588,21 @@ namespace ChessClicker
                 _controller.ResetBoardTracking(currentBoard);
                 SetPreview(currentBoard);
                 moveInputTextBox.Clear();
-                if (_timerGameLoop.Enabled)
-                    await _controller.RequestEngineMoveAsync(_activeBoardBounds, _isWhiteView);
-                Log($"[Opponent move] Registered {registeredMove}; the detected mover is based on its source piece.");
+                if (!_gameEndedAwaitingBoardReset && !_timerGameLoop.Enabled)
+                {
+                    _controller.StartAutomation();
+                    _timerGameLoop.Start();
+                    playButton.Text = "Stop (F2)";
+                    UpdateStatusLabel();
+                    Log("[Play] Resumed scanning after the registered move.");
+                }
+
+                if (!_gameEndedAwaitingBoardReset)
+                    await _controller.RequestEngineMoveOnCurrentTurnAsync(
+                        _activeBoardBounds, _isWhiteView);
+                Log(
+                    $"[Opponent move] Registered {registeredMove}; the detected mover is based on its source piece. " +
+                    "Requested an engine reply for the resulting side to move.");
             }
             catch (Exception ex)
             {
