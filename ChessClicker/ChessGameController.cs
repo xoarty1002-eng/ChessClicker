@@ -28,6 +28,7 @@ namespace ChessClicker
 
         public event Action<string>? StatusChanged;
         public event Action<string>? BoardChanged;
+        public event Action? GameEnded;
 
         public bool IsBusy { get; private set; }
 
@@ -96,6 +97,7 @@ namespace ChessClicker
             _moveConfirmation.Cancel();
             NotifyBoardChanged();
             StatusChanged?.Invoke($"[Position loaded] {_board.Turn} to move.");
+            StopIfGameOver();
         }
 
         public bool TryReconstructSingleMoveFromBoard(
@@ -160,6 +162,7 @@ namespace ChessClicker
             NotifyBoardChanged();
             StatusChanged?.Invoke(
                 $"[Position reconstructed] Detected the opening move {inferredMove}; {_board.Turn} to move.");
+            StopIfGameOver();
             return true;
         }
 
@@ -210,6 +213,8 @@ namespace ChessClicker
                     {
                         NotifyBoardChanged();
                         StatusChanged?.Invoke($"[Move confirmed] {pendingMove} was detected on the board.");
+                        if (StopIfGameOver())
+                            return;
                     }
                     else
                     {
@@ -227,6 +232,8 @@ namespace ChessClicker
                         NotifyBoardChanged();
                         StatusChanged?.Invoke(
                             $"[Move confirmed] The board shows {observedMove}, not the expected engine move {pendingMove}; tracked the displayed move.");
+                        if (StopIfGameOver())
+                            return;
                         if (_automationActive && ShouldEngineMove(isWhiteView))
                             await RequestEngineMoveCoreAsync(bounds, isWhiteView, cancellationToken);
                     }
@@ -249,6 +256,8 @@ namespace ChessClicker
                     : string.Equals(clickedMove, appliedMove, StringComparison.OrdinalIgnoreCase)
                         ? $"[Move confirmed] Clicked move {appliedMove} appeared on the stable board."
                         : $"[Move confirmed] Board shows {appliedMove}, not clicked move {clickedMove}; tracked the displayed move.");
+                if (StopIfGameOver())
+                    return;
                 if (ShouldEngineMove(isWhiteView))
                     await RequestEngineMoveCoreAsync(bounds, isWhiteView, cancellationToken);
             }
@@ -311,6 +320,7 @@ namespace ChessClicker
             NotifyBoardChanged();
             StatusChanged?.Invoke(
                 $"[Opponent move registered] {mover} played {move}; {_board.Turn} to move.");
+            StopIfGameOver();
             return move;
         }
 
@@ -401,6 +411,9 @@ namespace ChessClicker
             bool isWhiteView,
             CancellationToken cancellationToken)
         {
+            if (StopIfGameOver())
+                return;
+
             if (_moveConfirmation.PendingMove != null)
             {
                 StatusChanged?.Invoke(
@@ -419,13 +432,8 @@ namespace ChessClicker
         private async Task<string?> GetEngineMoveSuggestionAsync(CancellationToken cancellationToken)
         {
             int skillLevel = GetSkillLevelForNextTurn();
-            if (_board.Checkmate || !_board.HasLegalMoveForTurn())
-            {
-                StatusChanged?.Invoke(_board.Checkmate
-                    ? "[Game over] Checkmate."
-                    : "[Game over] The side to move has no legal moves (stalemate).");
+            if (StopIfGameOver())
                 return null;
-            }
 
             StatusChanged?.Invoke($"[Engine] Calculating a move at skill level {skillLevel}/20...");
             string enginePath = await _engine.EnsureEngineInstalledAsync(_settings.EnginePath);
@@ -526,6 +534,8 @@ namespace ChessClicker
                 {
                     NotifyBoardChanged();
                     StatusChanged?.Invoke($"[Move confirmed] {move} was detected on the board.");
+                    if (StopIfGameOver())
+                        return;
                     if (continueGame && _automationActive && ShouldEngineMove(isWhiteView))
                         await RequestEngineMoveCoreAsync(bounds, isWhiteView, cancellationToken);
                     return;
@@ -538,6 +548,8 @@ namespace ChessClicker
                     NotifyBoardChanged();
                     StatusChanged?.Invoke(
                         $"[Move confirmed] The board shows {observedMove}, not the expected engine move {move}; tracked the displayed move.");
+                    if (StopIfGameOver())
+                        return;
                     if (continueGame && _automationActive && ShouldEngineMove(isWhiteView))
                         await RequestEngineMoveCoreAsync(bounds, isWhiteView, cancellationToken);
                     return;
@@ -633,7 +645,11 @@ namespace ChessClicker
         private string? ApplyDetectedMove(string candidates, Bitmap boardImage, bool isWhiteView)
         {
             string[] moves = candidates.Split('|');
-            string? move = BoardMoveDetector.FindUniqueLegalMove(moves, IsLegalMove);
+            string? move = BoardMoveDetector.FindUniqueCheckmatingMove(moves, _board);
+            if (move != null)
+                return _board.MakeMove(move) || _board.MakeObservedMove(move) ? move : null;
+
+            move = BoardMoveDetector.FindUniqueLegalMove(moves, IsLegalMove);
             if (move != null)
                 return _board.MakeMove(move) ? move : null;
 
@@ -716,6 +732,19 @@ namespace ChessClicker
         private void NotifyBoardChanged()
         {
             BoardChanged?.Invoke(_board.GetDebugBoardString());
+        }
+
+        private bool StopIfGameOver()
+        {
+            if (!_board.Checkmate && _board.HasLegalMoveForTurn())
+                return false;
+
+            StopAutomation();
+            StatusChanged?.Invoke(_board.Checkmate
+                ? "[Game over] Checkmate; Play stopped."
+                : "[Game over] Stalemate; Play stopped.");
+            GameEnded?.Invoke();
+            return true;
         }
     }
 }

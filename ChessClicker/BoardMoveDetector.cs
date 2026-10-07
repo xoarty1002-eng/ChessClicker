@@ -56,6 +56,36 @@ namespace ChessClicker
             return matchingMove;
         }
 
+        public static string? FindUniqueCheckmatingMove(
+            IEnumerable<string> candidates,
+            ChessBoard position)
+        {
+            ArgumentNullException.ThrowIfNull(candidates);
+            ArgumentNullException.ThrowIfNull(position);
+
+            string? checkmatingMove = null;
+            string positionFen = position.GenerateFen();
+            HashSet<string> distinctCandidates = new(StringComparer.OrdinalIgnoreCase);
+            foreach (string candidate in candidates)
+            {
+                if (candidate == null ||
+                    (candidate.Length != 4 && candidate.Length != 5) ||
+                    !distinctCandidates.Add(candidate))
+                    continue;
+
+                ChessBoard nextPosition = new(positionFen);
+                if ((!nextPosition.MakeMove(candidate) && !nextPosition.MakeObservedMove(candidate)) ||
+                    !nextPosition.Checkmate)
+                    continue;
+
+                if (checkmatingMove != null)
+                    return null;
+                checkmatingMove = candidate;
+            }
+
+            return checkmatingMove;
+        }
+
         public static string CreateCandidates(
             IReadOnlyList<(int Rank, int File)> changedSquares,
             bool isWhiteView,

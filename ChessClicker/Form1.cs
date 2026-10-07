@@ -38,6 +38,7 @@ namespace ChessClicker
             InitializeComponent();
             _controller = new ChessGameController();
             _controller.StatusChanged += Log;
+            _controller.GameEnded += Controller_GameEnded;
 
             calibrateButton.Click += btnCalibrate_Click;
             playButton.Click += PlayButton_Click;
@@ -396,6 +397,21 @@ namespace ChessClicker
             playButton.Text = "Play (F2)";
             UpdateStatusLabel();
             Log("[Play] Stopped.");
+        }
+
+        private void Controller_GameEnded()
+        {
+            if (IsDisposed || !IsHandleCreated)
+                return;
+            if (InvokeRequired)
+            {
+                BeginInvoke((Action)Controller_GameEnded);
+                return;
+            }
+
+            _timerGameLoop.Stop();
+            playButton.Text = "Play (F2)";
+            UpdateStatusLabel();
         }
 
         private void EnsureBoardOrientationDetected(Bitmap boardImage)
