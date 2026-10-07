@@ -15,6 +15,10 @@ namespace ChessClicker
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "ChessClicker",
             "settings.json");
+        private static readonly string PieceAppearanceFilePath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "ChessClicker",
+            "piece-appearance.json");
         private static readonly TimeSpan LiveCalibrationInterval = TimeSpan.FromSeconds(2);
 
         private Rectangle _activeBoardBounds;
@@ -29,6 +33,7 @@ namespace ChessClicker
         private bool _startingPositionResetPending;
         private bool _gameEndedAwaitingBoardReset;
         private DateTime _lastAutoCalibrationAttempt;
+        private PieceAppearanceRecognizer? _pieceAppearanceRecognizer;
         private DesktopMouseHook? _desktopMouseHook;
         private ChessClickerSettings _settings = ChessClickerSettings.Default;
         private readonly ChessGameController _controller;
@@ -52,6 +57,7 @@ namespace ChessClicker
 
             _controller.UpdateSettings(_settings);
             LoadSettings();
+            LoadPieceAppearanceRecognizer();
             LoadBoardBounds();
             _timerGameLoop.Interval = 1000 / _settings.FramesPerSecond;
             _timerGameLoop.Tick += TimerGameLoop_Tick;
@@ -73,6 +79,24 @@ namespace ChessClicker
             catch (Exception ex)
             {
                 Log($"[Settings Error] Could not load settings: {ex.Message}. Defaults are active.");
+            }
+        }
+
+        private void LoadPieceAppearanceRecognizer()
+        {
+            if (!File.Exists(PieceAppearanceFilePath))
+                return;
+
+            try
+            {
+                _pieceAppearanceRecognizer =
+                    PieceAppearanceRecognizer.LoadFromFile(PieceAppearanceFilePath);
+                Log("[Piece calibration] Loaded saved piece appearance signatures.");
+            }
+            catch (Exception ex)
+            {
+                _pieceAppearanceRecognizer = null;
+                Log($"[Piece calibration error] Could not load saved piece appearance signatures: {ex.Message}");
             }
         }
 
@@ -316,6 +340,42 @@ namespace ChessClicker
             RefreshPreview();
             UpdateStatusLabel();
             Log($"[Calibration Saved] Board bounds: {_activeBoardBounds.Width}x{_activeBoardBounds.Height}.");
+            _ = CalibratePieceAppearanceAsync();
+        }
+
+        private async Task CalibratePieceAppearanceAsync()
+        {
+            _pieceAppearanceRecognizer = null;
+            try
+            {
+                Log("[Piece calibration] Keep the standard starting position visible while the piece signatures are learned.");
+                using Bitmap image = await _controller.CaptureStableBoardAsync(_activeBoardBounds);
+                DetectBoardOrientation(image);
+                PieceAppearanceRecognizer recognizer =
+                    PieceAppearanceRecognizer.TrainFromStandardPosition(
+                        image, _isWhiteView, _settings.MinimumPieceSignatureSeparationPercent);
+                PieceBoardScanResult scan = recognizer.Scan(image, _isWhiteView);
+
+                _pieceAppearanceRecognizer = recognizer;
+                try
+                {
+                    recognizer.SaveToFile(PieceAppearanceFilePath);
+                }
+                catch (Exception ex)
+                {
+                    Log($"[Piece calibration warning] Signatures are available until the app closes but could not be saved: {ex.Message}");
+                }
+                moveInputTextBox.Text = scan.Fen;
+                Log(
+                    $"[Piece calibration complete] Learned piece appearance from the standard starting position. " +
+                    $"Detected FEN: {scan.Fen}");
+                if (scan.UncertainSquares.Count > 0)
+                    Log($"[Piece calibration warning] Review uncertain squares: {string.Join(", ", scan.UncertainSquares)}.");
+            }
+            catch (Exception ex)
+            {
+                Log($"[Piece calibration error] Could not learn piece appearances: {ex.Message}");
+            }
         }
 
         private async void PlayButton_Click(object? sender, EventArgs e)
@@ -705,65 +765,39 @@ namespace ChessClicker
                 return;
             }
 
+            if (_pieceAppearanceRecognizer == null)
+            {
+                Log("[FEN scan] Calibrate while the standard starting position is visible to learn the piece appearances first.");
+                return;
+            }
+
             try
             {
-                if (string.IsNullOrWhiteSpace(moveInputTextBox.Text))
-                {
-                    Log("[FEN scan] Enter the exact FEN for the currently displayed board. A starting FEN is not assumed.");
-                    return;
-                }
-
-                ParsedChessPositionInput input = ChessPositionInput.Parse(moveInputTextBox.Text);
-                if (input.Kind != ChessPositionInputKind.Fen)
-                {
-                    Log("[FEN scan] Enter the exact current FEN in the input box first.");
-                    return;
-                }
-
                 Log($"[FEN scan] Waiting for a square board image stable for {_settings.StableBoardDurationMilliseconds} ms...");
                 using Bitmap image = await _controller.CaptureStableBoardAsync(_activeBoardBounds);
                 SetPreview(image);
                 DetectBoardOrientation(image);
-                IReadOnlyList<PieceAppearanceSample> samples =
-                    PieceAppearanceImageSampler.ExtractSamples(image, input.Value, _isWhiteView);
-                PieceAppearanceReport report = PieceAppearanceAnalyzer.Analyze(
-                    samples, _settings.MinimumPieceSignatureSeparationPercent);
-
-                if (report.MissingPieces.Count > 0)
+                PieceBoardScanResult scan = _pieceAppearanceRecognizer.Scan(image, _isWhiteView);
+                moveInputTextBox.Text = scan.Fen;
+                string uncertain = scan.UncertainSquares.Count == 0
+                    ? "none"
+                    : string.Join(", ", scan.UncertainSquares);
+                Log($"[FEN scan complete] Detected: {scan.Fen}; uncertain squares: {uncertain}.");
+                if (scan.UsesDefaultMetadata)
+                    Log("[FEN scan note] Piece placement is detected visually; side to move, castling, en-passant, and move counters are not visible and were defaulted. Edit those FEN fields before using the position.");
+                try
                 {
-                    string missing = string.Join(", ", report.MissingPieces.Select(FormatPieceLabel));
-                    Log($"[FEN scan incomplete] Position lacks samples for: {missing}. Use a position containing both colors of all six piece types.");
-                    return;
+                    _ = new ChessBoard(scan.Fen);
                 }
-
-                string first = FormatPieceLabel(report.FirstClosestPiece);
-                string second = FormatPieceLabel(report.SecondClosestPiece);
-                Log(report.IsSeparable
-                    ? $"[FEN scan passed] All 12 piece classes are represented. Closest contrast/shape signatures: {first} vs {second}, {report.MinimumSeparationPercent:0.0}% (minimum {_settings.MinimumPieceSignatureSeparationPercent}%)."
-                    : $"[FEN scan failed] {first} and {second} signatures are only {report.MinimumSeparationPercent:0.0}% apart; minimum is {_settings.MinimumPieceSignatureSeparationPercent}%. Adjust calibration, theme, or the settings threshold.");
-                foreach ((char piece, int count) in report.SampleCounts.OrderBy(pair => pair.Key))
-                    Log($"[FEN scan sample] {FormatPieceLabel(piece)}: {count} figure(s).");
+                catch (FormatException ex)
+                {
+                    Log($"[FEN scan warning] The detected placement is not a valid chess position: {ex.Message}. Correct the FEN in the input box.");
+                }
             }
             catch (Exception ex)
             {
                 Log($"[FEN scan error] {ex.Message}");
             }
-        }
-
-        private static string FormatPieceLabel(char piece)
-        {
-            string color = char.IsUpper(piece) ? "White" : "Black";
-            string name = char.ToUpperInvariant(piece) switch
-            {
-                'K' => "King",
-                'Q' => "Queen",
-                'R' => "Rook",
-                'B' => "Bishop",
-                'N' => "Knight",
-                'P' => "Pawn",
-                _ => "Unknown"
-            };
-            return $"{color} {name}";
         }
 
         private void btnSettings_Click(object? sender, EventArgs e)
@@ -827,7 +861,8 @@ namespace ChessClicker
                 $"[Settings] Saved. Preview rate: {_settings.FramesPerSecond} FPS; " +
                 $"smoothing: {_settings.PreviewSmoothingPercent}%; " +
                 $"calibrate while playing: {_settings.CalibrateWhilePlaying}; " +
-                $"process unique legal move on turn mismatch: {_settings.ProcessPossibleLegalTurn}.");
+                $"process unique legal move on turn mismatch: {_settings.ProcessPossibleLegalTurn}; " +
+                $"ambiguous move stable wait: {_settings.AmbiguousMoveStableDurationMilliseconds} ms.");
         }
 
         private void ApplyPreviewSettings()

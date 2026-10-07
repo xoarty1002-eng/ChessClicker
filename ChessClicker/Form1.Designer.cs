@@ -99,7 +99,7 @@ namespace ChessClicker
             moveInputTextBox.Dock = DockStyle.Fill;
             moveInputTextBox.Multiline = true;
             moveInputTextBox.ScrollBars = ScrollBars.Vertical;
-            moveInputTextBox.PlaceholderText = "Enter UCI move (e2e4) or full FEN";
+            moveInputTextBox.PlaceholderText = "Enter UCI move (e2e4) or edit scanned FEN";
             inputActions.Dock = DockStyle.Fill;
             inputActions.ColumnCount = 1;
             inputActions.RowCount = 3;

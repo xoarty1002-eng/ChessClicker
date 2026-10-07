@@ -76,7 +76,7 @@ public sealed class MouseMoveExecutorTests
             {
                 TimeSpan.FromMilliseconds(80),
                 TimeSpan.FromMilliseconds(50),
-                TimeSpan.FromMilliseconds(150),
+                TimeSpan.FromMilliseconds(300),
                 TimeSpan.FromMilliseconds(80),
                 TimeSpan.FromMilliseconds(50)
             },

@@ -26,7 +26,6 @@ namespace ChessClicker
         private static readonly TimeSpan MoveConfirmationTimeout = TimeSpan.FromSeconds(8);
         private static readonly TimeSpan BoardStabilityTimeout = TimeSpan.FromSeconds(8);
         private static readonly TimeSpan IdlePositionAuditInterval = TimeSpan.FromMinutes(1);
-        private static readonly TimeSpan AmbiguousMoveStableDuration = TimeSpan.FromMilliseconds(1500);
         private int _engineTurnCount;
 
         public event Action<string>? StatusChanged;
@@ -192,7 +191,7 @@ namespace ChessClicker
         {
             int requiredMilliseconds = Math.Max(
                 _settings.StableBoardDurationMilliseconds,
-                (int)AmbiguousMoveStableDuration.TotalMilliseconds);
+                _settings.AmbiguousMoveStableDurationMilliseconds);
             StatusChanged?.Invoke(
                 $"[Move detection] Multiple legal moves remain; waiting for the board to stay stable for {requiredMilliseconds} ms before retrying.");
 
@@ -610,7 +609,7 @@ namespace ChessClicker
                 return null;
             }
 
-            StatusChanged?.Invoke($"[Engine suggestion] {move} (not clicked).");
+            StatusChanged?.Invoke($"[Engine suggestion] {move} (ready to click).");
             return move;
         }
 
@@ -643,11 +642,15 @@ namespace ChessClicker
             try
             {
                 _clicker.ExecuteMoveOnScreen(move, bounds, isWhiteView);
+                StatusChanged?.Invoke(
+                    $"[Click input] Sent source and destination clicks for {move} to " +
+                    $"({fromPoint.X},{fromPoint.Y}) then ({toPoint.X},{toPoint.Y}).");
             }
-            catch
+            catch (Exception ex)
             {
                 _moveConfirmation.Cancel();
-                throw;
+                throw new InvalidOperationException(
+                    $"Windows did not accept both mouse clicks for move {move}: {ex.Message}", ex);
             }
 
             StatusChanged?.Invoke($"[Move sent] {move}. Waiting for the board to show the move...");

@@ -73,10 +73,31 @@ namespace ChessClicker
             bool isWhiteView)
         {
             ArgumentNullException.ThrowIfNull(boardImage);
-            if (boardImage.Width != boardImage.Height)
-                throw new ArgumentException("FEN appearance scanning requires a square board capture.", nameof(boardImage));
             var board = new ChessBoard(fen);
             List<PieceAppearanceSample> samples = new();
+            IReadOnlyDictionary<string, double[]> signatures =
+                ExtractSquareSignatures(boardImage, isWhiteView);
+            foreach ((string square, double[] signature) in signatures)
+            {
+                char piece = board.GetPieceAt(square);
+                if (piece != ' ')
+                    samples.Add(new PieceAppearanceSample(piece, signature));
+            }
+
+            return samples;
+        }
+
+        public static IReadOnlyDictionary<string, double[]> ExtractSquareSignatures(
+            Bitmap boardImage,
+            bool isWhiteView)
+        {
+            ArgumentNullException.ThrowIfNull(boardImage);
+            if (boardImage.Width != boardImage.Height)
+                throw new ArgumentException("Piece scanning requires a square board capture.", nameof(boardImage));
+            if (boardImage.Width < 8)
+                throw new ArgumentException("The board capture must be at least 8-by-8 pixels.", nameof(boardImage));
+
+            Dictionary<string, double[]> signatures = new(StringComparer.Ordinal);
             for (int screenRank = 0; screenRank < 8; screenRank++)
             {
                 for (int screenFile = 0; screenFile < 8; screenFile++)
@@ -88,16 +109,12 @@ namespace ChessClicker
                     Point center = new(left + (right - left) / 2, top + (bottom - top) / 2);
                     string square = BoardMouseCoordinates.ScreenPointToSquare(
                         center, new Rectangle(0, 0, boardImage.Width, boardImage.Height), isWhiteView);
-                    char piece = board.GetPieceAt(square);
-                    if (piece == ' ')
-                        continue;
-
                     Rectangle squareBounds = Rectangle.FromLTRB(left, top, right, bottom);
-                    samples.Add(new PieceAppearanceSample(piece, ExtractSignature(boardImage, squareBounds)));
+                    signatures.Add(square, ExtractSignature(boardImage, squareBounds));
                 }
             }
 
-            return samples;
+            return signatures;
         }
 
         private static double[,] ExtractOccupancyScores(Bitmap image)

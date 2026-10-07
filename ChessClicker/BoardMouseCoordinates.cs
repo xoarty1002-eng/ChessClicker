@@ -133,7 +133,7 @@ namespace ChessClicker
             try
             {
                 ClickSquare(from, TimeSpan.FromMilliseconds(80));
-                _delay(TimeSpan.FromMilliseconds(150));
+                _delay(TimeSpan.FromMilliseconds(300));
                 ClickSquare(to, TimeSpan.FromMilliseconds(80));
             }
             finally

@@ -23,6 +23,7 @@ namespace ChessClicker
         public int StableBoardDurationMilliseconds { get; }
         public int MinimumPieceSignatureSeparationPercent { get; }
         public bool ProcessPossibleLegalTurn { get; }
+        public int AmbiguousMoveStableDurationMilliseconds { get; }
 
         [JsonConstructor]
         public ChessClickerSettings(
@@ -41,7 +42,8 @@ namespace ChessClicker
             string engineSide = "Bottom",
             int stableBoardDurationMilliseconds = 500,
             int minimumPieceSignatureSeparationPercent = 8,
-            bool processPossibleLegalTurn = true)
+            bool processPossibleLegalTurn = true,
+            int ambiguousMoveStableDurationMilliseconds = 1500)
         {
             if (moveTimeMilliseconds < 100 || moveTimeMilliseconds > 10000)
                 throw new ArgumentOutOfRangeException(nameof(moveTimeMilliseconds), "Move time must be between 100 and 10000 milliseconds.");
@@ -69,6 +71,10 @@ namespace ChessClicker
                 throw new ArgumentOutOfRangeException(
                     nameof(minimumPieceSignatureSeparationPercent),
                     "Minimum piece signature separation must be between 1 and 100 percent.");
+            if (ambiguousMoveStableDurationMilliseconds is < 0 or > 10000)
+                throw new ArgumentOutOfRangeException(
+                    nameof(ambiguousMoveStableDurationMilliseconds),
+                    "Ambiguous-move stability duration must be between 0 and 10000 milliseconds.");
             ArgumentException.ThrowIfNullOrWhiteSpace(startingPositionFen);
             _ = new ChessBoard(startingPositionFen);
 
@@ -88,6 +94,7 @@ namespace ChessClicker
             StableBoardDurationMilliseconds = stableBoardDurationMilliseconds;
             MinimumPieceSignatureSeparationPercent = minimumPieceSignatureSeparationPercent;
             ProcessPossibleLegalTurn = processPossibleLegalTurn;
+            AmbiguousMoveStableDurationMilliseconds = ambiguousMoveStableDurationMilliseconds;
         }
 
         public int RecommendedFramesPerSecond =>

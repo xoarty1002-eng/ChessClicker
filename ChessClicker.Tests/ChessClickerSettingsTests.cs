@@ -42,6 +42,7 @@ public sealed class ChessClickerSettingsTests
         Assert.Equal(500, ChessClickerSettings.Default.StableBoardDurationMilliseconds);
         Assert.Equal(8, ChessClickerSettings.Default.MinimumPieceSignatureSeparationPercent);
         Assert.True(ChessClickerSettings.Default.ProcessPossibleLegalTurn);
+        Assert.Equal(1500, ChessClickerSettings.Default.AmbiguousMoveStableDurationMilliseconds);
     }
 
     [Theory]
@@ -82,7 +83,7 @@ public sealed class ChessClickerSettingsTests
         const string midgameFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1";
         var expected = new ChessClickerSettings(
             1500, 14, 12, 22, "Blue", true, 3, true, 75, midgameFen,
-            "/engines/example-engine", "Duo", "Top", 1200, 17, false);
+            "/engines/example-engine", "Duo", "Top", 1200, 17, false, 2300);
 
         try
         {
@@ -105,6 +106,7 @@ public sealed class ChessClickerSettingsTests
             Assert.Equal(expected.StableBoardDurationMilliseconds, actual.StableBoardDurationMilliseconds);
             Assert.Equal(expected.MinimumPieceSignatureSeparationPercent, actual.MinimumPieceSignatureSeparationPercent);
             Assert.Equal(expected.ProcessPossibleLegalTurn, actual.ProcessPossibleLegalTurn);
+            Assert.Equal(expected.AmbiguousMoveStableDurationMilliseconds, actual.AmbiguousMoveStableDurationMilliseconds);
         }
         finally
         {
@@ -135,6 +137,7 @@ public sealed class ChessClickerSettingsTests
             Assert.Equal(10, loaded.FramesPerSecond);
             Assert.Equal(8, loaded.MinimumPieceSignatureSeparationPercent);
             Assert.True(loaded.ProcessPossibleLegalTurn);
+            Assert.Equal(1500, loaded.AmbiguousMoveStableDurationMilliseconds);
         }
         finally
         {
@@ -165,6 +168,15 @@ public sealed class ChessClickerSettingsTests
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new ChessClickerSettings(
             1000, 20, minimumPieceSignatureSeparationPercent: separationPercent));
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(10001)]
+    public void RejectsUnsupportedAmbiguousMoveWait(int durationMilliseconds)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new ChessClickerSettings(
+            1000, 20, ambiguousMoveStableDurationMilliseconds: durationMilliseconds));
     }
 
     [Theory]

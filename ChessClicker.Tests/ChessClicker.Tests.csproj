@@ -23,6 +23,7 @@
     <Compile Include="../ChessClicker/ChessSideSelection.cs" Link="ChessSideSelection.cs" />
     <Compile Include="../ChessClicker/ChessPositionInput.cs" Link="ChessPositionInput.cs" />
     <Compile Include="../ChessClicker/PieceAppearanceAnalyzer.cs" Link="PieceAppearanceAnalyzer.cs" />
+    <Compile Include="../ChessClicker/PieceSignatureClassifier.cs" Link="PieceSignatureClassifier.cs" />
     <Compile Include="../ChessClicker/BoardOrientationDetector.cs" Link="BoardOrientationDetector.cs" />
     <Compile Include="../ChessClicker/MoveConfirmation.cs" Link="MoveConfirmation.cs" />
     <Compile Include="../ChessClicker/BoardBrightnessAnalyzer.cs" Link="BoardBrightnessAnalyzer.cs" />
