@@ -22,6 +22,7 @@ namespace ChessClicker
         public string EngineSide { get; }
         public int StableBoardDurationMilliseconds { get; }
         public int MinimumPieceSignatureSeparationPercent { get; }
+        public bool ProcessPossibleLegalTurn { get; }
 
         [JsonConstructor]
         public ChessClickerSettings(
@@ -39,7 +40,8 @@ namespace ChessClicker
             string playMode = "Solo",
             string engineSide = "Bottom",
             int stableBoardDurationMilliseconds = 500,
-            int minimumPieceSignatureSeparationPercent = 8)
+            int minimumPieceSignatureSeparationPercent = 8,
+            bool processPossibleLegalTurn = true)
         {
             if (moveTimeMilliseconds < 100 || moveTimeMilliseconds > 10000)
                 throw new ArgumentOutOfRangeException(nameof(moveTimeMilliseconds), "Move time must be between 100 and 10000 milliseconds.");
@@ -85,6 +87,7 @@ namespace ChessClicker
             EngineSide = engineSide;
             StableBoardDurationMilliseconds = stableBoardDurationMilliseconds;
             MinimumPieceSignatureSeparationPercent = minimumPieceSignatureSeparationPercent;
+            ProcessPossibleLegalTurn = processPossibleLegalTurn;
         }
 
         public int RecommendedFramesPerSecond =>

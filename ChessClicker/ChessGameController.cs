@@ -235,7 +235,8 @@ namespace ChessClicker
                     {
                         _scanner.ResetStateTracking(boardImage);
                         _moveConfirmation.Cancel();
-                        string? observedMove = ApplyDetectedMove(candidates, boardImage, isWhiteView);
+                        string? observedMove = ApplyDetectedMove(
+                            candidates, boardImage, isWhiteView, out bool pendingMoveRecoveredTurnMismatch);
                         if (observedMove == null)
                         {
                             _moveConfirmation.Expect(pendingMove);
@@ -246,7 +247,9 @@ namespace ChessClicker
 
                         NotifyBoardChanged();
                         StatusChanged?.Invoke(
-                            $"[Move confirmed] The board shows {observedMove}, not the expected engine move {pendingMove}; tracked the displayed move.");
+                            pendingMoveRecoveredTurnMismatch
+                                ? $"[Move recovered] The board shows {observedMove}, not the expected engine move {pendingMove}; processed it despite the tracked turn mismatch."
+                                : $"[Move confirmed] The board shows {observedMove}, not the expected engine move {pendingMove}; tracked the displayed move.");
                         if (StopIfGameOver())
                             return;
                         if (_automationActive && ShouldEngineMove(isWhiteView))
@@ -255,7 +258,8 @@ namespace ChessClicker
                     return;
                 }
 
-                string? appliedMove = ApplyDetectedMove(candidates, boardImage, isWhiteView);
+                string? appliedMove = ApplyDetectedMove(
+                    candidates, boardImage, isWhiteView, out bool detectedMoveRecoveredTurnMismatch);
                 string? clickedMove = _pendingClickedMove;
                 _pendingClickedMove = null;
                 if (appliedMove == null)
@@ -267,7 +271,9 @@ namespace ChessClicker
 
                 NotifyBoardChanged();
                 StatusChanged?.Invoke(clickedMove == null
-                    ? $"[Move confirmed] Detected {appliedMove} from the stable board image."
+                    ? detectedMoveRecoveredTurnMismatch
+                        ? $"[Move recovered] Processed {appliedMove} despite the tracked turn mismatch; the tracked position was synchronized."
+                        : $"[Move confirmed] Detected {appliedMove} from the stable board image."
                     : string.Equals(clickedMove, appliedMove, StringComparison.OrdinalIgnoreCase)
                         ? $"[Move confirmed] Clicked move {appliedMove} appeared on the stable board."
                         : $"[Move confirmed] Board shows {appliedMove}, not clicked move {clickedMove}; tracked the displayed move.");
@@ -576,12 +582,15 @@ namespace ChessClicker
                 }
 
                 _moveConfirmation.Cancel();
-                string? observedMove = ApplyDetectedMove(candidates, currentBoard, isWhiteView);
+                string? observedMove = ApplyDetectedMove(
+                    candidates, currentBoard, isWhiteView, out bool recoveredTurnMismatch);
                 if (observedMove != null)
                 {
                     NotifyBoardChanged();
                     StatusChanged?.Invoke(
-                        $"[Move confirmed] The board shows {observedMove}, not the expected engine move {move}; tracked the displayed move.");
+                        recoveredTurnMismatch
+                            ? $"[Move recovered] The board shows {observedMove}, not the expected engine move {move}; processed it despite the tracked turn mismatch."
+                            : $"[Move confirmed] The board shows {observedMove}, not the expected engine move {move}; tracked the displayed move.");
                     if (StopIfGameOver())
                         return;
                     if (continueGame && _automationActive && ShouldEngineMove(isWhiteView))
@@ -673,16 +682,41 @@ namespace ChessClicker
             return false;
         }
 
-        private string? ApplyDetectedMove(string candidates, Bitmap boardImage, bool isWhiteView)
+        private string? ApplyDetectedMove(
+            string candidates,
+            Bitmap boardImage,
+            bool isWhiteView,
+            out bool processedPossibleLegalTurn)
         {
+            processedPossibleLegalTurn = false;
             string[] moves = candidates.Split('|');
             string? move = BoardMoveDetector.FindUniqueCheckmatingMove(moves, _board);
             if (move != null)
-                return _board.MakeMove(move) || _board.MakeObservedMove(move) ? move : null;
+            {
+                if (_board.MakeMove(move))
+                    return move;
+                if (_settings.ProcessPossibleLegalTurn && _board.MakeObservedMove(move))
+                {
+                    processedPossibleLegalTurn = true;
+                    return move;
+                }
+                return null;
+            }
 
             move = BoardMoveDetector.FindUniqueLegalMove(moves, IsLegalMove);
             if (move != null)
                 return _board.MakeMove(move) ? move : null;
+
+            if (_settings.ProcessPossibleLegalTurn &&
+                !moves.Any(IsLegalMove))
+            {
+                move = BoardMoveDetector.FindUniqueLegalMove(moves, IsLegalMoveIgnoringTurn);
+                if (move != null && _board.MakeObservedMove(move))
+                {
+                    processedPossibleLegalTurn = true;
+                    return move;
+                }
+            }
 
             if (!PieceAppearanceImageSampler.TryExtractOccupiedSquares(
                     boardImage, _board, isWhiteView, out IReadOnlySet<string> observedOccupiedSquares))
@@ -693,7 +727,16 @@ namespace ChessClicker
             if (move == null)
                 return null;
 
-            return _board.MakeMove(move) || _board.MakeObservedMove(move) ? move : null;
+            if (!_settings.ProcessPossibleLegalTurn && !IsLegalMove(move))
+                return null;
+
+            if (_board.MakeMove(move))
+                return move;
+            if (!_settings.ProcessPossibleLegalTurn || !_board.MakeObservedMove(move))
+                return null;
+
+            processedPossibleLegalTurn = true;
+            return move;
         }
 
         private string DescribeBoardDetection(

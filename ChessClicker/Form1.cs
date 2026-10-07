@@ -770,7 +770,11 @@ namespace ChessClicker
                 }
             }
 
-            Log($"[Settings] Saved. Preview rate: {_settings.FramesPerSecond} FPS; smoothing: {_settings.PreviewSmoothingPercent}%; calibrate while playing: {_settings.CalibrateWhilePlaying}.");
+            Log(
+                $"[Settings] Saved. Preview rate: {_settings.FramesPerSecond} FPS; " +
+                $"smoothing: {_settings.PreviewSmoothingPercent}%; " +
+                $"calibrate while playing: {_settings.CalibrateWhilePlaying}; " +
+                $"process unique legal move on turn mismatch: {_settings.ProcessPossibleLegalTurn}.");
         }
 
         private void ApplyPreviewSettings()

@@ -41,6 +41,7 @@ public sealed class ChessClickerSettingsTests
         Assert.Equal("Bottom", ChessClickerSettings.Default.EngineSide);
         Assert.Equal(500, ChessClickerSettings.Default.StableBoardDurationMilliseconds);
         Assert.Equal(8, ChessClickerSettings.Default.MinimumPieceSignatureSeparationPercent);
+        Assert.True(ChessClickerSettings.Default.ProcessPossibleLegalTurn);
     }
 
     [Theory]
@@ -81,7 +82,7 @@ public sealed class ChessClickerSettingsTests
         const string midgameFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1";
         var expected = new ChessClickerSettings(
             1500, 14, 12, 22, "Blue", true, 3, true, 75, midgameFen,
-            "/engines/example-engine", "Duo", "Top", 1200, 17);
+            "/engines/example-engine", "Duo", "Top", 1200, 17, false);
 
         try
         {
@@ -103,6 +104,7 @@ public sealed class ChessClickerSettingsTests
             Assert.Equal(expected.EngineSide, actual.EngineSide);
             Assert.Equal(expected.StableBoardDurationMilliseconds, actual.StableBoardDurationMilliseconds);
             Assert.Equal(expected.MinimumPieceSignatureSeparationPercent, actual.MinimumPieceSignatureSeparationPercent);
+            Assert.Equal(expected.ProcessPossibleLegalTurn, actual.ProcessPossibleLegalTurn);
         }
         finally
         {
@@ -132,6 +134,7 @@ public sealed class ChessClickerSettingsTests
             Assert.Equal(500, loaded.StableBoardDurationMilliseconds);
             Assert.Equal(10, loaded.FramesPerSecond);
             Assert.Equal(8, loaded.MinimumPieceSignatureSeparationPercent);
+            Assert.True(loaded.ProcessPossibleLegalTurn);
         }
         finally
         {

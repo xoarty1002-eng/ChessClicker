@@ -18,6 +18,7 @@ namespace ChessClicker
         private readonly ComboBox _engineSideInput;
         private readonly CheckBox _randomSkillInput;
         private readonly CheckBox _calibrateWhilePlayingInput;
+        private readonly CheckBox _processPossibleLegalTurnInput;
         private readonly NumericUpDown _randomSkillIntervalInput;
         private readonly TextBox _startingPositionFenInput;
         private readonly TextBox _enginePathInput;
@@ -37,7 +38,8 @@ namespace ChessClicker
             (string)_playModeInput.SelectedItem!,
             (string)_engineSideInput.SelectedItem!,
             (int)_stableBoardDurationInput.Value,
-            (int)_pieceSignatureSeparationInput.Value);
+            (int)_pieceSignatureSeparationInput.Value,
+            _processPossibleLegalTurnInput.Checked);
 
         public SettingsForm(ChessClickerSettings settings)
         {
@@ -49,18 +51,18 @@ namespace ChessClicker
             MaximizeBox = false;
             MinimizeBox = false;
             ShowInTaskbar = false;
-            ClientSize = new Size(560, 740);
+            ClientSize = new Size(560, 790);
 
             var layout = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 2,
-                RowCount = 16,
+                RowCount = 17,
                 Padding = new Padding(12)
             };
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 62));
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38));
-            for (int row = 0; row < 13; row++)
+            for (int row = 0; row < 14; row++)
                 layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
@@ -143,6 +145,15 @@ namespace ChessClicker
             };
             AddSetting(layout, "Starting position FEN", _startingPositionFenInput, 12);
             AddSetting(layout, "Minimum figure signature separation (%)", _pieceSignatureSeparationInput, 13);
+            _processPossibleLegalTurnInput = new CheckBox
+            {
+                Text = "Process a unique legal move if tracked turn is wrong",
+                Checked = settings.ProcessPossibleLegalTurn,
+                AutoSize = true,
+                Anchor = AnchorStyles.Left
+            };
+            layout.Controls.Add(_processPossibleLegalTurnInput, 0, 14);
+            layout.SetColumnSpan(_processPossibleLegalTurnInput, 2);
 
             var note = new Label
             {
@@ -150,7 +161,7 @@ namespace ChessClicker
                 AutoSize = true,
                 Dock = DockStyle.Fill
             };
-            layout.Controls.Add(note, 0, 14);
+            layout.Controls.Add(note, 0, 15);
             layout.SetColumnSpan(note, 2);
 
             var buttons = new FlowLayoutPanel
@@ -162,7 +173,7 @@ namespace ChessClicker
             var cancelButton = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
             buttons.Controls.Add(saveButton);
             buttons.Controls.Add(cancelButton);
-            layout.Controls.Add(buttons, 0, 15);
+            layout.Controls.Add(buttons, 0, 16);
             layout.SetColumnSpan(buttons, 2);
 
             Controls.Add(layout);

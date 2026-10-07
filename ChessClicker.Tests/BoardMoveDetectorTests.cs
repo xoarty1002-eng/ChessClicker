@@ -22,6 +22,26 @@ public sealed class BoardMoveDetectorTests
     }
 
     [Fact]
+    public void FindsUniqueLegalMoveWhenTrackedTurnIsWrong()
+    {
+        var position = new ChessBoard(
+            "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1");
+        string[] candidates = ["a7a6", "e4a6", "a7b6"];
+
+        Assert.Null(BoardMoveDetector.FindUniqueLegalMove(
+            candidates,
+            move => IsLegalMove(position, move)));
+
+        string? detectedMove = BoardMoveDetector.FindUniqueLegalMove(
+            candidates,
+            move => IsLegalIgnoringTurn(position, move));
+
+        Assert.Equal("a7a6", detectedMove);
+        Assert.True(position.MakeObservedMove(detectedMove!));
+        Assert.Equal("white", position.Turn);
+    }
+
+    [Fact]
     public void DoesNotGuessWhenNoCandidateMatchesTheObservedOccupancy()
     {
         var position = new ChessBoard(ChessBoard.StandardStartingFen);
@@ -83,4 +103,14 @@ public sealed class BoardMoveDetectorTests
 
         return occupiedSquares;
     }
+
+    private static bool IsLegalMove(ChessBoard position, string move) =>
+        position.ValidateMove(
+            8 - (move[1] - '0'), move[0] - 'a',
+            8 - (move[3] - '0'), move[2] - 'a');
+
+    private static bool IsLegalIgnoringTurn(ChessBoard position, string move) =>
+        position.ValidateMoveIgnoringTurn(
+            8 - (move[1] - '0'), move[0] - 'a',
+            8 - (move[3] - '0'), move[2] - 'a');
 }
