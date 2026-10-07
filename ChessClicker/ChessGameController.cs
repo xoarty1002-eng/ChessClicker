@@ -215,7 +215,7 @@ namespace ChessClicker
                     {
                         _scanner.ResetStateTracking(boardImage);
                         _moveConfirmation.Cancel();
-                        string? observedMove = ApplyDetectedMove(candidates);
+                        string? observedMove = ApplyDetectedMove(candidates, boardImage, isWhiteView);
                         if (observedMove == null)
                         {
                             _moveConfirmation.Expect(pendingMove);
@@ -233,7 +233,7 @@ namespace ChessClicker
                     return;
                 }
 
-                string? appliedMove = ApplyDetectedMove(candidates);
+                string? appliedMove = ApplyDetectedMove(candidates, boardImage, isWhiteView);
                 string? clickedMove = _pendingClickedMove;
                 _pendingClickedMove = null;
                 if (appliedMove == null)
@@ -532,7 +532,7 @@ namespace ChessClicker
                 }
 
                 _moveConfirmation.Cancel();
-                string? observedMove = ApplyDetectedMove(candidates);
+                string? observedMove = ApplyDetectedMove(candidates, currentBoard, isWhiteView);
                 if (observedMove != null)
                 {
                     NotifyBoardChanged();
@@ -630,21 +630,23 @@ namespace ChessClicker
             return false;
         }
 
-        private string? ApplyDetectedMove(string candidates)
+        private string? ApplyDetectedMove(string candidates, Bitmap boardImage, bool isWhiteView)
         {
             string[] moves = candidates.Split('|');
             string? move = BoardMoveDetector.FindUniqueLegalMove(moves, IsLegalMove);
             if (move != null)
                 return _board.MakeMove(move) ? move : null;
 
-            if (Array.Exists(moves, IsLegalMove))
+            if (!PieceAppearanceImageSampler.TryExtractOccupiedSquares(
+                    boardImage, _board, isWhiteView, out IReadOnlySet<string> observedOccupiedSquares))
                 return null;
 
-            if (!CandidatesContainExactlyTwoSquares(moves))
+            move = BoardMoveDetector.FindUniqueMoveMatchingOccupiedSquares(
+                moves, _board, observedOccupiedSquares);
+            if (move == null)
                 return null;
 
-            move = BoardMoveDetector.FindUniqueLegalMove(moves, IsLegalMoveIgnoringTurn);
-            return move != null && _board.MakeObservedMove(move) ? move : null;
+            return _board.MakeMove(move) || _board.MakeObservedMove(move) ? move : null;
         }
 
         private bool BoardImageStillMatchesTrackedPosition(Bitmap boardImage, bool isWhiteView)
@@ -697,23 +699,6 @@ namespace ChessClicker
             int toFile = move[2] - 'a';
             int toRank = 8 - (move[3] - '0');
             return _board.ValidateMoveIgnoringTurn(fromRank, fromFile, toRank, toFile);
-        }
-
-        private static bool CandidatesContainExactlyTwoSquares(IEnumerable<string> moves)
-        {
-            HashSet<string> squares = new(StringComparer.Ordinal);
-            foreach (string move in moves)
-            {
-                if (move.Length < 4)
-                    continue;
-
-                squares.Add(move[..2]);
-                squares.Add(move.Substring(2, 2));
-                if (squares.Count > 2)
-                    return false;
-            }
-
-            return squares.Count == 2;
         }
 
         private void ExpirePendingClickHint()

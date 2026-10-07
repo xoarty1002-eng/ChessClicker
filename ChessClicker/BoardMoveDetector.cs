@@ -21,6 +21,41 @@ namespace ChessClicker
             return legalMoves.Length == 1 ? legalMoves[0] : null;
         }
 
+        public static string? FindUniqueMoveMatchingOccupiedSquares(
+            IEnumerable<string> candidates,
+            ChessBoard position,
+            IReadOnlySet<string> observedOccupiedSquares)
+        {
+            ArgumentNullException.ThrowIfNull(candidates);
+            ArgumentNullException.ThrowIfNull(position);
+            ArgumentNullException.ThrowIfNull(observedOccupiedSquares);
+
+            string? matchingMove = null;
+            string positionFen = position.GenerateFen();
+            HashSet<string> distinctCandidates = new(StringComparer.OrdinalIgnoreCase);
+            foreach (string candidate in candidates)
+            {
+                if (candidate == null ||
+                    (candidate.Length != 4 && candidate.Length != 5) ||
+                    !distinctCandidates.Add(candidate))
+                    continue;
+
+                ChessBoard nextPosition = new(positionFen);
+                if (!nextPosition.MakeMove(candidate) && !nextPosition.MakeObservedMove(candidate))
+                    continue;
+
+                HashSet<string> predictedOccupiedSquares = GetOccupiedSquares(nextPosition);
+                if (!predictedOccupiedSquares.SetEquals(observedOccupiedSquares))
+                    continue;
+
+                if (matchingMove != null)
+                    return null;
+                matchingMove = candidate;
+            }
+
+            return matchingMove;
+        }
+
         public static string CreateCandidates(
             IReadOnlyList<(int Rank, int File)> changedSquares,
             bool isWhiteView,
@@ -55,6 +90,20 @@ namespace ChessClicker
             }
 
             return string.Join('|', candidates);
+        }
+
+        private static HashSet<string> GetOccupiedSquares(ChessBoard position)
+        {
+            HashSet<string> occupiedSquares = new(StringComparer.Ordinal);
+            for (char file = 'a'; file <= 'h'; file++)
+                for (char rank = '1'; rank <= '8'; rank++)
+                {
+                    string square = $"{file}{rank}";
+                    if (position.GetPieceAt(square) != ' ')
+                        occupiedSquares.Add(square);
+                }
+
+            return occupiedSquares;
         }
 
         private static string? GetCastlingMove(HashSet<string> changedSquares)

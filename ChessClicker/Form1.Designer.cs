@@ -113,7 +113,7 @@ namespace ChessClicker
             ConfigureButton(scanFenButton, "Scan FEN");
             scanFenButton.Dock = DockStyle.Fill;
             scanFenButton.Margin = new Padding(4, 2, 0, 0);
-            ConfigureButton(registerOpponentMoveButton, "Register opponent move");
+            ConfigureButton(registerOpponentMoveButton, "Register");
             registerOpponentMoveButton.Dock = DockStyle.Fill;
             registerOpponentMoveButton.Height = 28;
             registerOpponentMoveButton.Margin = new Padding(4, 2, 0, 0);

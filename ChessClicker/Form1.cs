@@ -508,7 +508,7 @@ namespace ChessClicker
                 SetPreview(currentBoard);
                 moveInputTextBox.Clear();
                 if (_timerGameLoop.Enabled)
-                    _ = _controller.RequestEngineMoveAsync(_activeBoardBounds, _isWhiteView);
+                    await _controller.RequestEngineMoveAsync(_activeBoardBounds, _isWhiteView);
                 Log($"[Opponent move] Registered {registeredMove}; the detected mover is based on its source piece.");
             }
             catch (Exception ex)
