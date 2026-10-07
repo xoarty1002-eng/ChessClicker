@@ -4,6 +4,25 @@ using System.Threading;
 
 namespace ChessClicker
 {
+    public static class BoardBoundsGeometry
+    {
+        public static Rectangle ToSquare(Rectangle bounds)
+        {
+            if (bounds.Width <= 0 || bounds.Height <= 0)
+                throw new ArgumentException("The chessboard bounds must have positive width and height.", nameof(bounds));
+
+            int side = Math.Min(bounds.Width, bounds.Height);
+            return new Rectangle(
+                bounds.X + (bounds.Width - side) / 2,
+                bounds.Y + (bounds.Height - side) / 2,
+                side,
+                side);
+        }
+
+        public static bool IsSquare(Rectangle bounds) =>
+            bounds.Width > 0 && bounds.Height > 0 && bounds.Width == bounds.Height;
+    }
+
     public static class BoardMouseCoordinates
     {
         public static Point SquareCenter(string square, Rectangle boardBounds, bool isWhiteView)

@@ -143,6 +143,15 @@ public sealed class MouseMoveExecutorTests
             BoardMouseCoordinates.ScreenPointToSquare(new Point(900, 300), BoardBounds, true));
     }
 
+    [Fact]
+    public void NormalizesCalibratedBoundsToCenteredSquare()
+    {
+        Rectangle square = BoardBoundsGeometry.ToSquare(new Rectangle(10, 20, 820, 800));
+
+        Assert.Equal(new Rectangle(20, 20, 800, 800), square);
+        Assert.True(BoardBoundsGeometry.IsSquare(square));
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

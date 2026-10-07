@@ -27,7 +27,7 @@ namespace ChessClicker
         public ChessClickerSettings(
             int moveTimeMilliseconds,
             int stockfishSkillLevel,
-            int framesPerSecond = 5,
+            int framesPerSecond = 10,
             int brightnessThreshold = 18,
             string boardTheme = "Green",
             bool randomizeStockfishSkill = false,
@@ -86,6 +86,12 @@ namespace ChessClicker
             StableBoardDurationMilliseconds = stableBoardDurationMilliseconds;
             MinimumPieceSignatureSeparationPercent = minimumPieceSignatureSeparationPercent;
         }
+
+        public int RecommendedFramesPerSecond =>
+            Math.Clamp(
+                (5000 + StableBoardDurationMilliseconds - 1) / StableBoardDurationMilliseconds,
+                1,
+                30);
 
         public static ChessClickerSettings Default { get; } = new(1000, 20);
 

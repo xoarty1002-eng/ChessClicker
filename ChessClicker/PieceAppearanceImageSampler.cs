@@ -14,6 +14,8 @@ namespace ChessClicker
             bool isWhiteView)
         {
             ArgumentNullException.ThrowIfNull(boardImage);
+            if (boardImage.Width != boardImage.Height)
+                throw new ArgumentException("FEN appearance scanning requires a square board capture.", nameof(boardImage));
             var board = new ChessBoard(fen);
             List<PieceAppearanceSample> samples = new();
             for (int screenRank = 0; screenRank < 8; screenRank++)

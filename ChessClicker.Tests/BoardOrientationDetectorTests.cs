@@ -37,6 +37,28 @@ public sealed class BoardOrientationDetectorTests
     }
 
     [Fact]
+    public void DetectsSideFromPieceColorEvenWhenOneSideHasFewerPieces()
+    {
+        double[,] contrast = new double[8, 8];
+        contrast[7, 4] = 42;
+        for (int file = 0; file < 8; file++)
+            contrast[0, file] = -36;
+
+        Assert.True(BoardOrientationDetector.TryDetectWhiteView(contrast, out bool whiteView));
+        Assert.True(whiteView);
+    }
+
+    [Fact]
+    public void DoesNotChooseOrientationWhenBothEndsHaveTheSamePieceColorEvidence()
+    {
+        double[,] contrast = new double[8, 8];
+        contrast[0, 0] = -35;
+        contrast[7, 7] = -35;
+
+        Assert.False(BoardOrientationDetector.TryDetectWhiteView(contrast, out _));
+    }
+
+    [Fact]
     public void RejectsNonBoardContrastMatrix()
     {
         Assert.Throws<ArgumentException>(() =>

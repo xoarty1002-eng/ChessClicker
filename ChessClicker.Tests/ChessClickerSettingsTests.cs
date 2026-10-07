@@ -27,7 +27,8 @@ public sealed class ChessClickerSettingsTests
     {
         Assert.Equal(1000, ChessClickerSettings.Default.MoveTimeMilliseconds);
         Assert.Equal(20, ChessClickerSettings.Default.StockfishSkillLevel);
-        Assert.Equal(5, ChessClickerSettings.Default.FramesPerSecond);
+        Assert.Equal(10, ChessClickerSettings.Default.FramesPerSecond);
+        Assert.Equal(10, ChessClickerSettings.Default.RecommendedFramesPerSecond);
         Assert.Equal(18, ChessClickerSettings.Default.BrightnessThreshold);
         Assert.Equal("Green", ChessClickerSettings.Default.BoardTheme);
         Assert.False(ChessClickerSettings.Default.RandomizeStockfishSkill);
@@ -129,6 +130,7 @@ public sealed class ChessClickerSettingsTests
             Assert.Equal("Solo", loaded.PlayMode);
             Assert.Equal("Bottom", loaded.EngineSide);
             Assert.Equal(500, loaded.StableBoardDurationMilliseconds);
+            Assert.Equal(10, loaded.FramesPerSecond);
             Assert.Equal(8, loaded.MinimumPieceSignatureSeparationPercent);
         }
         finally
@@ -137,6 +139,20 @@ public sealed class ChessClickerSettingsTests
             if (directory != null && Directory.Exists(directory))
                 Directory.Delete(directory, recursive: true);
         }
+    }
+
+    [Theory]
+    [InlineData(500, 10)]
+    [InlineData(1000, 5)]
+    [InlineData(10000, 1)]
+    public void RecommendsFiveBoardSamplesDuringTheStabilityWindow(int stableMilliseconds, int expectedFps)
+    {
+        var settings = new ChessClickerSettings(
+            1000,
+            20,
+            stableBoardDurationMilliseconds: stableMilliseconds);
+
+        Assert.Equal(expectedFps, settings.RecommendedFramesPerSecond);
     }
 
     [Theory]

@@ -93,7 +93,9 @@ namespace ChessClicker
                     width < 40 || height < 40)
                     throw new InvalidDataException("Saved board bounds are invalid.");
 
-                _activeBoardBounds = new Rectangle(x, y, width, height);
+                _activeBoardBounds = BoardBoundsGeometry.ToSquare(new Rectangle(x, y, width, height));
+                if (_activeBoardBounds.Width != width || _activeBoardBounds.Height != height)
+                    SaveBoardBounds();
                 RefreshPreview();
                 Log("[Startup] Loaded saved board calibration.");
             }
@@ -132,7 +134,7 @@ namespace ChessClicker
                         Rectangle? refinedBounds = await FindRefinedBoundsAsync(_activeBoardBounds);
                         if (refinedBounds is Rectangle refined && refined != _activeBoardBounds)
                         {
-                            _activeBoardBounds = refined;
+                            _activeBoardBounds = BoardBoundsGeometry.ToSquare(refined);
                             SaveBoardBounds();
                             using Bitmap recalibratedFrame = _controller.CaptureBoard(_activeBoardBounds);
                             _controller.ResetBoardTracking(recalibratedFrame);
@@ -280,7 +282,7 @@ namespace ChessClicker
 
             string square = BoardMouseCoordinates.ScreenPointToSquare(
                 point, _activeBoardBounds, _isWhiteView);
-            _controller.RegisterSquareClick(square, _activeBoardBounds, _isWhiteView);
+            _controller.RegisterSquareClick(square);
         }
 
         private void OnCalibrationClick(Point point)
@@ -305,14 +307,15 @@ namespace ChessClicker
                 return;
             }
 
-            _activeBoardBounds = new Rectangle(_topLeft.X, _topLeft.Y, width, height);
+            _activeBoardBounds = BoardBoundsGeometry.ToSquare(
+                new Rectangle(_topLeft.X, _topLeft.Y, width, height));
             SaveBoardBounds();
             RefreshPreview();
             UpdateStatusLabel();
             Log($"[Calibration Saved] Board bounds: {_activeBoardBounds.Width}x{_activeBoardBounds.Height}.");
         }
 
-        private void PlayButton_Click(object? sender, EventArgs e)
+        private async void PlayButton_Click(object? sender, EventArgs e)
         {
             if (_isCalibrating)
             {
@@ -345,7 +348,8 @@ namespace ChessClicker
             try
             {
                 EnsureDesktopMouseHook();
-                using Bitmap baseline = _controller.CaptureBoard(_activeBoardBounds);
+                Log($"[Play] Waiting for a stable square board image ({_settings.StableBoardDurationMilliseconds} ms)...");
+                using Bitmap baseline = await _controller.CaptureStableBoardAsync(_activeBoardBounds);
                 DetectBoardOrientation(baseline);
                 if (!_positionInitialized || _startingPositionResetPending)
                 {
@@ -364,7 +368,9 @@ namespace ChessClicker
                 string playDescription = _settings.PlayMode == "Solo"
                     ? $"Solo mode; engine controls the {_settings.EngineSide} side"
                     : "Duo mode; the engine controls both sides";
-                Log($"[Play] {playDescription}. Scanning at {_settings.FramesPerSecond} FPS. Press F2 to stop.");
+                Log(
+                    $"[Play] {playDescription}. Scanning at {_settings.FramesPerSecond} FPS " +
+                    $"({_settings.RecommendedFramesPerSecond} recommended for {_settings.StableBoardDurationMilliseconds} ms stability). Press F2 to stop.");
                 _ = _controller.RequestEngineMoveAsync(_activeBoardBounds, _isWhiteView);
             }
             catch (Exception ex)
@@ -503,7 +509,7 @@ namespace ChessClicker
                 _startingPositionResetPending = false;
                 if (_activeBoardBounds.Width >= 40 && _activeBoardBounds.Height >= 40)
                 {
-                    using Bitmap frame = _controller.CaptureBoard(_activeBoardBounds);
+                    using Bitmap frame = await _controller.CaptureStableBoardAsync(_activeBoardBounds);
                     _controller.ResetBoardTracking(frame);
                     SetPreview(frame);
                 }
@@ -533,26 +539,25 @@ namespace ChessClicker
 
             try
             {
-                string fen;
-                if (!string.IsNullOrWhiteSpace(moveInputTextBox.Text))
+                if (string.IsNullOrWhiteSpace(moveInputTextBox.Text))
                 {
-                    ParsedChessPositionInput input = ChessPositionInput.Parse(moveInputTextBox.Text);
-                    if (input.Kind != ChessPositionInputKind.Fen)
-                    {
-                        Log("[FEN scan] Enter the exact current FEN in the input box first.");
-                        return;
-                    }
-                    fen = input.Value;
-                }
-                else
-                {
-                    fen = _settings.StartingPositionFen;
+                    Log("[FEN scan] Enter the exact FEN for the currently displayed board. A starting FEN is not assumed.");
+                    return;
                 }
 
-                using Bitmap image = _controller.CaptureBoard(_activeBoardBounds);
+                ParsedChessPositionInput input = ChessPositionInput.Parse(moveInputTextBox.Text);
+                if (input.Kind != ChessPositionInputKind.Fen)
+                {
+                    Log("[FEN scan] Enter the exact current FEN in the input box first.");
+                    return;
+                }
+
+                Log($"[FEN scan] Waiting for a square board image stable for {_settings.StableBoardDurationMilliseconds} ms...");
+                using Bitmap image = await _controller.CaptureStableBoardAsync(_activeBoardBounds);
+                SetPreview(image);
                 DetectBoardOrientation(image);
                 IReadOnlyList<PieceAppearanceSample> samples =
-                    PieceAppearanceImageSampler.ExtractSamples(image, fen, _isWhiteView);
+                    PieceAppearanceImageSampler.ExtractSamples(image, input.Value, _isWhiteView);
                 PieceAppearanceReport report = PieceAppearanceAnalyzer.Analyze(
                     samples, _settings.MinimumPieceSignatureSeparationPercent);
 
