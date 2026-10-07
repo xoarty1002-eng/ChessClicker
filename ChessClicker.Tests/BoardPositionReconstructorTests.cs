@@ -6,6 +6,28 @@ namespace ChessClicker.Tests;
 public sealed class BoardPositionReconstructorTests
 {
     [Fact]
+    public void CorrectsBlackToMoveWhenTheBoardIsStillInTheStandardStartingLayout()
+    {
+        const string blackToMove =
+            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1";
+
+        Assert.True(BoardPositionReconstructor.TryCorrectStandardStartingTurn(
+            blackToMove, out string correctedFen));
+        Assert.Equal(ChessBoard.StandardStartingFen, correctedFen);
+    }
+
+    [Fact]
+    public void PreservesBlackToMoveForNonStartingPositions()
+    {
+        const string blackToMove =
+            "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1";
+
+        Assert.False(BoardPositionReconstructor.TryCorrectStandardStartingTurn(
+            blackToMove, out string unchangedFen));
+        Assert.Equal(blackToMove, unchangedFen);
+    }
+
+    [Fact]
     public void ReconstructsOneOpeningPawnMoveFromOccupiedSquares()
     {
         var startingPosition = new ChessBoard(ChessBoard.StandardStartingFen);

@@ -101,29 +101,58 @@ namespace ChessClicker
             Bitmap boardImage,
             string startingFen,
             bool isWhiteView,
-            out string? inferredMove)
+            out string? inferredMove,
+            out string? troubleshootingReason)
         {
             ArgumentNullException.ThrowIfNull(boardImage);
             ArgumentException.ThrowIfNullOrWhiteSpace(startingFen);
             if (IsBusy)
                 throw new InvalidOperationException("Cannot reconstruct the position while a move is being processed.");
 
-            ChessBoard startingPosition = new(startingFen);
+            inferredMove = null;
+            troubleshootingReason = null;
+            string activeStartingFen = startingFen;
+            bool correctedStartingTurn =
+                BoardPositionReconstructor.TryCorrectStandardStartingTurn(startingFen, out string whiteToMoveFen);
+            if (correctedStartingTurn)
+                activeStartingFen = whiteToMoveFen;
+
+            ChessBoard startingPosition = new(activeStartingFen);
             if (!PieceAppearanceImageSampler.TryExtractOccupiedSquares(
                     boardImage, startingPosition, isWhiteView, out IReadOnlySet<string> occupiedSquares))
             {
-                inferredMove = null;
-                StatusChanged?.Invoke(
-                    "[Position reconstruction] Piece/empty-square contrast was not clear enough to infer a move safely.");
+                troubleshootingReason =
+                    "The board image did not provide a clear enough distinction between pieces and empty squares.";
                 return false;
             }
 
             inferredMove = BoardPositionReconstructor.FindSingleQuietMove(
                 startingPosition, occupiedSquares);
             if (inferredMove == null)
-                return false;
+            {
+                HashSet<string> configuredOccupiedSquares = new(StringComparer.Ordinal);
+                for (char file = 'a'; file <= 'h'; file++)
+                    for (char rank = '1'; rank <= '8'; rank++)
+                    {
+                        string square = $"{file}{rank}";
+                        if (startingPosition.GetPieceAt(square) != ' ')
+                            configuredOccupiedSquares.Add(square);
+                    }
 
-            ResetPosition(startingFen);
+                if (!configuredOccupiedSquares.SetEquals(occupiedSquares))
+                    troubleshootingReason =
+                        "The observed board differs from the configured starting FEN, but no single legal quiet move could be identified.";
+                if (correctedStartingTurn && troubleshootingReason == null)
+                {
+                    ResetPosition(activeStartingFen);
+                    StatusChanged?.Invoke(
+                    "[Position corrected] The standard starting layout is visible, so White moves first.");
+                    return true;
+                }
+                return false;
+            }
+
+            ResetPosition(activeStartingFen);
             if (!_board.MakeMove(inferredMove))
                 throw new InvalidOperationException($"Could not apply reconstructed move {inferredMove}.");
 

@@ -5,6 +5,31 @@ namespace ChessClicker
 {
     public static class BoardPositionReconstructor
     {
+        public static bool TryCorrectStandardStartingTurn(string fen, out string correctedFen)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(fen);
+            ChessBoard position = new(fen);
+            string[] fields = fen.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            correctedFen = fen;
+            if (position.Turn != "black" || fields.Length != 6)
+                return false;
+
+            ChessBoard standardStart = new(ChessBoard.StandardStartingFen);
+            for (char file = 'a'; file <= 'h'; file++)
+            {
+                for (char rank = '1'; rank <= '8'; rank++)
+                {
+                    string square = $"{file}{rank}";
+                    if (position.GetPieceAt(square) != standardStart.GetPieceAt(square))
+                        return false;
+                }
+            }
+
+            fields[1] = "w";
+            correctedFen = string.Join(' ', fields);
+            return true;
+        }
+
         public static string? FindSingleQuietMove(
             ChessBoard startingPosition,
             IReadOnlySet<string> observedOccupiedSquares)

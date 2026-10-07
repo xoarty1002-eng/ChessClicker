@@ -354,11 +354,26 @@ namespace ChessClicker
                 if (!_positionInitialized || _startingPositionResetPending)
                 {
                     if (!_controller.TryReconstructSingleMoveFromBoard(
-                            baseline, _settings.StartingPositionFen, _isWhiteView, out _))
+                            baseline, _settings.StartingPositionFen, _isWhiteView,
+                            out _, out string? troubleshootingReason))
                     {
-                        _controller.ResetPosition(_settings.StartingPositionFen);
-                        Log(
-                            "[Position reconstruction] No single quiet move could be confidently matched to the configured starting FEN; loaded that FEN as-is.");
+                        if (troubleshootingReason != null)
+                        {
+                            using var troubleshooter = new PositionTroubleshooterForm(
+                                _settings.StartingPositionFen, troubleshootingReason);
+                            if (troubleshooter.ShowDialog(this) != DialogResult.OK)
+                            {
+                                Log("[Play] Cancelled from the position troubleshooter.");
+                                return;
+                            }
+
+                            _controller.ResetPosition(troubleshooter.CurrentFen);
+                        }
+                        else
+                        {
+                            _controller.ResetPosition(_settings.StartingPositionFen);
+                        }
+
                     }
 
                     _positionInitialized = true;
